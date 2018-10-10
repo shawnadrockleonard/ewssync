@@ -1,0 +1,12 @@
+﻿[
+  {
+    "MailBoxOwnerEmail": "sleonard@shawniq.onmicrosoft.com",
+    "StartUTC": "10/30/2018 7:00:00 AM",
+    "EndUTC": "10/30/2018 8:00:00 AM",
+    "Subject": "Test C",
+    "BookingRef": "Ref001",
+    "MeetingKey": 123456,
+    "SiteMailBox": "room1@shawniq.onmicrosoft.com",
+    "Location": "Room 1"
+  }
+]
