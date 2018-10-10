@@ -1,4 +1,5 @@
-﻿using EWSResourceSync.Services;
+﻿using EWS.Common.Models;
+using EWS.Common.Services;
 using Microsoft.Exchange.WebServices.Data;
 using Microsoft.ServiceBus.Messaging;
 using System;
@@ -16,20 +17,21 @@ namespace EWSResourceSync
         public MessageManager(CancellationToken token)
         {
             _cancel = token;
-            _sendFromO365Queue = QueueClient.CreateFromConnectionString(EWS.Config.ServiceBus.SendFromO365);
+            _sendFromO365Queue = QueueClient.CreateFromConnectionString(EWService.Config.ServiceBus.SendFromO365);
         }
 
 
         CancellationToken _cancel;
         QueueClient _sendFromO365Queue;
         static string[] Actions = new string[] { "Created", "Deleted", "Modified" };
+
         public async System.Threading.Tasks.Task SendFromO365Async(string roomSMPT, Appointment apt, int status)
         {
             Trace.WriteLine($"SendFromO365Async({roomSMPT}, {apt.Subject}) starting");
 
-            var refNoProp = apt.ExtendedProperties.FirstOrDefault(p => (p.PropertyDefinition == EWS.RefIdPropertyDef));
+            var refNoProp = apt.ExtendedProperties.FirstOrDefault(p => (p.PropertyDefinition == EWService.RefIdPropertyDef));
 
-            var meetingKeyProp = apt.ExtendedProperties.FirstOrDefault(p => (p.PropertyDefinition == EWS.MeetingKeyPropertyDef));
+            var meetingKeyProp = apt.ExtendedProperties.FirstOrDefault(p => (p.PropertyDefinition == EWService.MeetingKeyPropertyDef));
 
             var booking = new UpdatedBooking()
             {
@@ -56,7 +58,7 @@ namespace EWSResourceSync
             Trace.WriteLine($"GetToO365() starting");
             await System.Threading.Tasks.Task.Run(async () =>
             {
-                var queueClient = QueueClient.CreateFromConnectionString(EWS.Config.ServiceBus.ReadToO365);
+                var queueClient = QueueClient.CreateFromConnectionString(EWService.Config.ServiceBus.ReadToO365);
                 try
                 {
                     Trace.WriteLine($"GetToO365.OnMessageAsync starting");

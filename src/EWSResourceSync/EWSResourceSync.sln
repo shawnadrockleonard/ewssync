@@ -15,6 +15,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		..\..\_keys\system_config.json = ..\..\_keys\system_config.json
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EWS.Common", "EWS.Common\EWS.Common.csproj", "{8B523081-9074-4E3B-8B71-8B3331DD1EAD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{F059972F-0561-4203-ABB8-3ABB41CCBE22}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F059972F-0561-4203-ABB8-3ABB41CCBE22}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F059972F-0561-4203-ABB8-3ABB41CCBE22}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

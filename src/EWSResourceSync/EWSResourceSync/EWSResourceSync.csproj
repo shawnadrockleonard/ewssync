@@ -68,14 +68,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AppSettings.cs" />
-    <Compile Include="LoggedException.cs" />
     <Compile Include="MessageManager.cs" />
-    <Compile Include="Messages\BlockBooking.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Messages\UpdatedBooking.cs" />
-    <Compile Include="Services\EWS.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config">
@@ -87,6 +82,10 @@
     <ProjectReference Include="..\ews-managed-api-master\Microsoft.Exchange.WebServices.Data.csproj">
       <Project>{f059972f-0561-4203-abb8-3abb41ccbe22}</Project>
       <Name>Microsoft.Exchange.WebServices.Data</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\EWS.Common\EWS.Common.csproj">
+      <Project>{8b523081-9074-4e3b-8b71-8b3331dd1ead}</Project>
+      <Name>EWS.Common</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

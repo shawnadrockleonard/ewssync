@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace CreateTestMsgs
+namespace EWS.Common
 {
     // We use this class to indicate that the inner exception has been logged/traced, but it's
     // wrapped and passed on to the caller to indicate failure

@@ -1,4 +1,5 @@
-﻿using Microsoft.ServiceBus.Messaging;
+﻿using EWS.Common;
+using Microsoft.ServiceBus.Messaging;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -29,7 +30,7 @@ namespace CreateTestMsgs
 
                 var str = File.OpenText("bookings.json");
                 var inp = str.ReadToEnd();
-                var bookings = JsonConvert.DeserializeObject<IEnumerable<EWSResourceSync.UpdatedBooking>>(inp);
+                var bookings = JsonConvert.DeserializeObject<IEnumerable<EWS.Common.Models.UpdatedBooking>>(inp);
 
                 var i = 0;
                 foreach (var booking in bookings)
@@ -52,7 +53,7 @@ namespace CreateTestMsgs
                 var queueClient = QueueClient.CreateFromConnectionString(appFile.ServiceBus.ReadToO365);
                 queueClient.OnMessage((msg) =>
                 {
-                    var booking = msg.GetBody<EWSResourceSync.UpdatedBooking>();
+                    var booking = msg.GetBody<EWS.Common.Models.UpdatedBooking>();
                     Console.WriteLine($"MailBoxOwnerEmail {booking.MailBoxOwnerEmail}");
                     msg.Complete();
 
@@ -70,7 +71,7 @@ namespace CreateTestMsgs
                 var queueClient = QueueClient.CreateFromConnectionString(appFile.ServiceBus.ReadFromO365);
                 queueClient.OnMessage((msg) =>
                 {
-                    var booking = msg.GetBody<EWSResourceSync.UpdatedBooking>();
+                    var booking = msg.GetBody<EWS.Common.Models.UpdatedBooking>();
                     Console.WriteLine($"Msg received: {booking.SiteMailBox} - {booking.Subject}. Cancel status: {booking.CancelStatus}");
                 }, new OnMessageOptions() { AutoComplete = true, MaxConcurrentCalls = 5 });
                 queueClient.Close();

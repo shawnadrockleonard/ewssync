@@ -1,14 +1,11 @@
-﻿using System;
-using System.Security.Cryptography.X509Certificates;
-using System.Threading.Tasks;
+﻿using EWS.Common;
+using EWS.Common.Models;
+using EWS.Common.Services;
 using Microsoft.Exchange.WebServices.Data;
-using Microsoft.IdentityModel.Clients.ActiveDirectory;
-using System.Linq;
-using Microsoft.ServiceBus.Messaging;
-using EWSResourceSync.Messages;
-using System.Diagnostics;
+using System;
 using System.Collections.Generic;
-using EWSResourceSync.Services;
+using System.Diagnostics;
+using System.Linq;
 
 namespace EWSResourceSync
 {
@@ -34,7 +31,6 @@ namespace EWSResourceSync
 
         static Program()
         {
-
         }
 
         private void Run()
@@ -46,7 +42,7 @@ namespace EWSResourceSync
             //tasks[0] = System.Threading.Tasks.Task.FromResult(0);
             tasks.Add(_queue.StartGetToO365Async());
             //tasks[0] = p.SyncToExchangeAsync();
-            tasks.Add(ListenToRoomReservationChangesAsync("sleonard@shawniq.onmicrosoft.com"));
+            tasks.Add(ListenToRoomReservationChangesAsync(EWService.Config.Exchange.ImpersonationAcct));
 
             try
             {
@@ -65,9 +61,9 @@ namespace EWSResourceSync
         private async System.Threading.Tasks.Task ListenToRoomReservationChangesAsync(string mailboxOwner)
         {
             Trace.WriteLine($"ListenToRoomReservationChangesAsync({mailboxOwner}) starting");
-            var service = await EWS.CreateExchangeServiceAsync(mailboxOwner);
+            var service = await EWService.CreateExchangeServiceAsync();
             var subs = new Dictionary<StreamingSubscription, ImpersonatedUserId>();
-            var reqProps = EWS.extendedProperties;
+            var reqProps = EWService.extendedProperties;
 
             //TODO: Is there a better way to enumerate a la PS Get-MailBox | Where {$_.ResourceType -eq "Room"}
             foreach (var list in service.GetRoomLists())
@@ -238,7 +234,7 @@ namespace EWSResourceSync
         private async System.Threading.Tasks.Task ReserveRoomAsync(UpdatedBooking booking)
         {
             Trace.WriteLine($"ReserveRoomAsync({booking.Location}) starting");
-            var service = await EWS.CreateExchangeServiceAsync();
+            var service = await EWService.CreateExchangeServiceAsync();
             service.ImpersonatedUserId = new ImpersonatedUserId(ConnectingIdType.SmtpAddress, booking.MailBoxOwnerEmail);
             Appointment meeting = new Appointment(service);
             meeting.Resources.Add(booking.SiteMailBox);
@@ -247,12 +243,12 @@ namespace EWSResourceSync
             meeting.Start = DateTime.Parse(booking.StartUTC);
             meeting.End = DateTime.Parse(booking.EndUTC);
             meeting.Location = booking.Location;
-            meeting.SetExtendedProperty(EWS.RefIdPropertyDef, booking.BookingRef);
-            meeting.SetExtendedProperty(EWS.MeetingKeyPropertyDef, booking.MeetingKey);
+            meeting.SetExtendedProperty(EWService.RefIdPropertyDef, booking.BookingRef);
+            meeting.SetExtendedProperty(EWService.MeetingKeyPropertyDef, booking.MeetingKey);
             //meeting.ReminderDueBy = DateTime.Now;
             meeting.Save(SendInvitationsMode.SendOnlyToAll);
             // Verify that the appointment was created by using the appointment's item ID.
-            var item = Item.Bind(service, meeting.Id, new PropertySet(ItemSchema.Subject, EWS.RefIdPropertyDef, EWS.MeetingKeyPropertyDef));
+            var item = Item.Bind(service, meeting.Id, new PropertySet(ItemSchema.Subject, EWService.RefIdPropertyDef, EWService.MeetingKeyPropertyDef));
             Console.WriteLine($"Appointment created: {item.Subject}");
             Trace.WriteLine($"ReserveRoomAsync({booking.Location}) completed");
             //TODO: The room will may decline if booked. Always declines for past dates. See also: https://social.msdn.microsoft.com/Forums/exchange/en-US/cead7451-dcc5-46b9-b225-b16874fdc914/ews-confirming-room-response-accepteddeclined-when-creating-appointment-where-room-is-invited
@@ -264,7 +260,7 @@ namespace EWSResourceSync
         private async System.Threading.Tasks.Task GetRooms()
         {
             Trace.WriteLine("GetRooms starting");
-            var service = await EWS.CreateExchangeServiceAsync();
+            var service = await EWService.CreateExchangeServiceAsync();
 
             try
             {
@@ -286,23 +282,3 @@ namespace EWSResourceSync
         }
     }
 }
-
-//foreach (var ev in a.Events)
-//{
-//    Trace.WriteLine($"ListenToRoomReservationChangesAsync event type: {ev.EventType}");
-//    switch (ev.EventType)
-//    {
-//        case EventType.Status:
-//            //TODO: how to respond to this??
-//            break;
-//        case EventType.Modified:
-//        case EventType.Moved:
-//        case EventType.Created:
-//            //await SendFromO365Async(a, ev);
-//            break;
-//        case EventType.NewMail:
-//        case EventType.Deleted:
-//        default:
-//            throw new ApplicationException($"Unexpected event: {ev.EventType}");
-//    }
-//}

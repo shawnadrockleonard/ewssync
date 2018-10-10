@@ -7,7 +7,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace EWSResourceSync
+namespace EWS.Common
 {
     /// <summary>
     /// Enables the query/selection of AppSettings from the App.config | web.config
@@ -104,6 +104,8 @@ namespace EWSResourceSync
         public string ServerName { get; set; }
 
         public int BatchSize { get; set; }
+
+        public string ImpersonationAcct { get; set; }
     }
 
     public class SettingsQueues

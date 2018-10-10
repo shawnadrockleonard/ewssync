@@ -7,9 +7,9 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace EWSResourceSync.Services
+namespace EWS.Common.Services
 {
-    public class EWS
+    public class EWService
     {
         private static readonly string EWSUrl = "";
         private static readonly string EWSAppId = "";
@@ -22,7 +22,7 @@ namespace EWSResourceSync.Services
         public static readonly Guid _myPropertySetId = new Guid("{DAD02742-32A0-406E-950E-4957E5A394E9}");
         public static PropertySet extendedProperties;
 
-        static EWS()
+        static EWService()
         {
             config = AppSettings.Current;
             EWSUrl = $"https://{config.Exchange.ServerName}";
@@ -58,7 +58,7 @@ namespace EWSResourceSync.Services
             get { return config; }
         }
 
-        public static async Task<ExchangeService> CreateExchangeServiceAsync(string impersonatedUser = "roomapp@shawniq.onmicrosoft.com", bool enableTrace = false)
+        public static async Task<ExchangeService> CreateExchangeServiceAsync(bool enableTrace = false)
         {
             //Trace.WriteLine($"CreateExchangeServiceAsync({impersonatedUser}, {enableTrace})");
             var auth = new AuthenticationContext(config.AzureAD.Authority);
@@ -69,7 +69,6 @@ namespace EWSResourceSync.Services
             exchangeService.TraceEnabled = true;
             exchangeService.TraceFlags = TraceFlags.All;
             exchangeService.Credentials = new OAuthCredentials(tokens.AccessToken);
-            exchangeService.ImpersonatedUserId = new ImpersonatedUserId(ConnectingIdType.SmtpAddress, impersonatedUser);
             exchangeService.TraceEnabled = enableTrace;
 
             //Trace.WriteLine($"CreateExchangeServiceAsync({impersonatedUser}, {enableTrace} completed");
