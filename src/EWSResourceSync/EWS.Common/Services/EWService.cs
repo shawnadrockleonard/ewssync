@@ -17,7 +17,9 @@ namespace EWS.Common.Services
         private static readonly int GetUserAvailabilityBatchSize = 75;
         static AppSettings config;
 
+        public const string RefIdPropertyName = "X-AptRefId";
         public static readonly ExtendedPropertyDefinition RefIdPropertyDef;
+        public const string MeetingKeyPropertyName = "X-MeetingKey";
         public static readonly ExtendedPropertyDefinition MeetingKeyPropertyDef;
         public static readonly Guid _myPropertySetId = new Guid("{DAD02742-32A0-406E-950E-4957E5A394E9}");
         public static PropertySet extendedProperties;
@@ -31,10 +33,10 @@ namespace EWS.Common.Services
             EWSAppAuthCert = config.AuthCert;
 
             RefIdPropertyDef = new ExtendedPropertyDefinition(DefaultExtendedPropertySet.Meeting, // InternetHeaders,
-                                    "X-AptRefId",
+                                    RefIdPropertyName,
                                     MapiPropertyType.String);
             MeetingKeyPropertyDef = new ExtendedPropertyDefinition(DefaultExtendedPropertySet.Meeting, // InternetHeaders,
-                                    "X-MeetingKey",
+                                    MeetingKeyPropertyName,
                                     MapiPropertyType.Integer);
 
             //RefIdPropertyDef = new ExtendedPropertyDefinition(

@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net;
 
 namespace EWSResourceSync
 {
@@ -38,14 +39,13 @@ namespace EWSResourceSync
             _queue = new MessageManager(CancellationTokenSource.Token);
             _queue.NewBookingToO365 += async (b) => await ReserveRoomAsync(b);
 
-            var tasks = new List<System.Threading.Tasks.Task>();
-            //tasks[0] = System.Threading.Tasks.Task.FromResult(0);
-            tasks.Add(_queue.StartGetToO365Async());
-            //tasks[0] = p.SyncToExchangeAsync();
-            tasks.Add(ListenToRoomReservationChangesAsync(EWService.Config.Exchange.ImpersonationAcct));
-
             try
             {
+                var tasks = new List<System.Threading.Tasks.Task>();
+
+                tasks.Add(_queue.StartGetToO365Async());
+                tasks.Add(ListenToRoomReservationChangesAsync(EWService.Config.Exchange.ImpersonationAcct));
+
                 System.Threading.Tasks.Task.WaitAll(tasks.ToArray());
             }
             catch (Exception ex)
@@ -54,6 +54,39 @@ namespace EWSResourceSync
             }
         }
 
+        public class ItemEventComparer : IEqualityComparer<ItemEvent>
+        {
+            public bool Equals(ItemEvent x, ItemEvent y)
+            {
+                // If reference same object including null then return true
+                if (object.ReferenceEquals(x, y))
+                {
+                    return true;
+                }
+
+                // If one object null the return false
+                if (object.ReferenceEquals(x, null) || object.ReferenceEquals(y, null))
+                {
+                    return false;
+                }
+
+                // Compare properties for equality
+                return (x.EventType == y.EventType && x.ItemId == y.ItemId);
+            }
+
+            public int GetHashCode(ItemEvent obj)
+            {
+                if (object.ReferenceEquals(obj, null))
+                {
+                    return 0;
+                }
+
+                int EventTypeHash = obj.EventType.GetHashCode();
+                int ItemIdHash = obj.ItemId.GetHashCode();
+
+                return EventTypeHash ^ ItemIdHash;
+            }
+        }
 
         // # TODO: Need to handle subscription for re-hydration
         // # TODO: evaluate why extension attributes are not returned in listener
@@ -61,7 +94,11 @@ namespace EWSResourceSync
         private async System.Threading.Tasks.Task ListenToRoomReservationChangesAsync(string mailboxOwner)
         {
             Trace.WriteLine($"ListenToRoomReservationChangesAsync({mailboxOwner}) starting");
+
+            ServicePointManager.DefaultConnectionLimit = ServicePointManager.DefaultPersistentConnectionLimit;
             var service = await EWService.CreateExchangeServiceAsync();
+            service.ImpersonatedUserId = new ImpersonatedUserId(ConnectingIdType.SmtpAddress, EWService.Config.Exchange.ImpersonationAcct);
+
             var subs = new Dictionary<StreamingSubscription, ImpersonatedUserId>();
             var reqProps = EWService.extendedProperties;
 
@@ -87,19 +124,19 @@ namespace EWSResourceSync
                         Trace.WriteLine($"ListenToRoomReservationChangesAsync.Subscribed to room {room.Address}");
                         subs.Add(sub, service.ImpersonatedUserId);
                     }
-                    catch(Microsoft.Exchange.WebServices.Data.ServiceRequestException sex)
+                    catch (Microsoft.Exchange.WebServices.Data.ServiceRequestException sex)
                     {
                         Trace.WriteLine($"Failed to provision subscription {sex.Message}");
                         throw new Exception($"Subscription could not be created for {room.Address} with MSG:{sex.Message}");
                     }
                 }
             }
-            
+
             // Create a streaming connection to the service object, over which events are returned to the client.
             // Keep the streaming connection open for 30 minutes.
             var connection = new StreamingSubscriptionConnection(service, subs.Keys.Select(s => s), 30);
             var semaphore = new System.Threading.SemaphoreSlim(1);
-            
+
             connection.OnNotificationEvent += async (s, a) =>
             {
                 Trace.WriteLine($"ListenToRoomReservationChangesAsync received notification");
@@ -108,47 +145,97 @@ namespace EWSResourceSync
                 // Move apt: ev.Type == Modified, IsUnmodified == false, 
                 var evGroups = a.Events.Where(ev => ev is ItemEvent)
                     .Select(ev => ((ItemEvent)ev))
-                        .OrderBy(ev => ev.ItemId.UniqueId)
-                            .GroupBy(ev => ev.ItemId);
-                //var reqProps = new PropertySet(
-                //    AppointmentSchema.Subject, 
-                //    AppointmentSchema.Start, 
-                //    AppointmentSchema.End, 
-                //    AppointmentSchema.Location,
-                //    AppointmentSchema.IsCancelled,
-                //    AppointmentSchema.IsUnmodified,
-                //    RefIdPropertyDef,
-                //    MeetingKeyPropertyDef);
+                    .OrderBy(ev => ev.ItemId.UniqueId)
+                    .GroupBy(ev => ev.ItemId);
+
+                var filterPropertySet = new PropertySet(
+                        AppointmentSchema.Location,
+                        AppointmentSchema.Subject,
+                        AppointmentSchema.Start,
+                        AppointmentSchema.End,
+                        AppointmentSchema.IsMeeting,
+                        AppointmentSchema.IsOnlineMeeting,
+                        AppointmentSchema.IsAllDayEvent,
+                        AppointmentSchema.IsRecurring,
+                        AppointmentSchema.IsCancelled,
+                        AppointmentSchema.IsUnmodified,
+                        AppointmentSchema.TimeZone,
+                        AppointmentSchema.ICalUid,
+                        AppointmentSchema.ParentFolderId,
+                        AppointmentSchema.ConversationId,
+                        AppointmentSchema.ICalRecurrenceId,
+                        EWService.RefIdPropertyDef,
+                        EWService.MeetingKeyPropertyDef);
 
                 foreach (var evGroup in evGroups)
                 {
-                    Appointment apt = null;
-                    foreach (ItemEvent ev in evGroup)
+                    Appointment appointmentTime = null;
+                    var itemId = evGroup.Key;
+
+                    var unfilteredEvents = evGroup.ToList();
+                    var filterEvents = unfilteredEvents.Distinct(new ItemEventComparer()).OrderByDescending(x => x.TimeStamp);
+                    foreach (ItemEvent ev in filterEvents)
                     {
                         // Find an item event you can bind to
+                        int action = 99;
                         var ewsService = a.Subscription.Service;
-                        var itemId = ev.ItemId;
-
                         var subscription = subs.FirstOrDefault(k => k.Key.Id == a.Subscription.Id);
 
                         try
                         {
                             ewsService.ImpersonatedUserId = new ImpersonatedUserId(ConnectingIdType.SmtpAddress, subscription.Value.Id);
-                            apt = (Appointment)Item.Bind(ewsService, itemId);
-                        }
-                        catch (ServiceResponseException ex)
-                        {
-                            Trace.WriteLine($"ServiceException: {ex.Message}", "Warning");
-                            continue;
-                        }
+                            appointmentTime = (Appointment)Item.Bind(ewsService, itemId);
 
-                        try
-                        {
-                            apt = (Appointment)Item.Bind(ewsService, itemId, reqProps);
-                            apt.Load(reqProps);
-                            if (apt.ExtendedProperties.Count == 0)
+
+
+                            if (ev.EventType == EventType.Created)
                             {
-                                Trace.WriteLine("This apt has no extended properties!!!");
+                                action = 0; // created
+                            }
+                            else if (ev.EventType == EventType.Moved && appointmentTime.IsCancelled)
+                            {
+                                action = 1; // deleted
+                            }
+                            else if (ev.EventType == EventType.Modified && !appointmentTime.IsUnmodified)
+                            {
+                                action = 2; // modified
+                            }
+                            else
+                            {
+                                continue;
+                            }
+
+                            ExtendedPropertyDefinition CleanGlobalObjectId = new ExtendedPropertyDefinition(DefaultExtendedPropertySet.Meeting, 0x23, MapiPropertyType.Binary);
+                            PropertySet psPropSet = new PropertySet(BasePropertySet.FirstClassProperties)
+                            {
+                                CleanGlobalObjectId
+                            };
+                            appointmentTime.Load(psPropSet);
+                            appointmentTime.TryGetProperty(CleanGlobalObjectId, out object CalIdVal);
+
+                            var icalId = appointmentTime.ICalUid;
+                            var mailboxId = appointmentTime.Organizer.Address;
+                            ewsService.ImpersonatedUserId = new ImpersonatedUserId(ConnectingIdType.SmtpAddress, mailboxId);
+                            CalendarFolder AtndCalendar = CalendarFolder.Bind(ewsService, new FolderId(WellKnownFolderName.Calendar, mailboxId), filterPropertySet);
+                            SearchFilter sfSearchFilter = new SearchFilter.IsEqualTo(CleanGlobalObjectId, Convert.ToBase64String((Byte[])CalIdVal));
+                            ItemView ivItemView = new ItemView(5)
+                            {
+                                PropertySet = filterPropertySet
+                            };
+                            FindItemsResults<Item> fiResults = AtndCalendar.FindItems(sfSearchFilter, ivItemView);
+                            if (fiResults.Items.Count > 0)
+                            {
+                                var filterApt = fiResults.Items.FirstOrDefault() as Appointment;
+                                Trace.WriteLine($"The first {fiResults.Items.Count()} appointments on your calendar from {filterApt.Start.ToShortDateString()} to {filterApt.End.ToShortDateString()}");
+
+                                var props = filterApt.ExtendedProperties.Where(p => (p.PropertyDefinition.PropertySet == DefaultExtendedPropertySet.Meeting));
+                                string refId = string.Empty;
+                                int meetingKey = 0;
+                                if (props.Count() > 0)
+                                {
+                                    refId = (string)props.First(p => p.PropertyDefinition.Name == EWService.RefIdPropertyName).Value;
+                                    meetingKey = (int)props.First(p => p.PropertyDefinition.Name == EWService.MeetingKeyPropertyName).Value;
+                                }
                             }
                         }
                         catch (ServiceResponseException ex)
@@ -157,27 +244,52 @@ namespace EWSResourceSync
                             continue;
                         }
 
-                        //var props = apt.ExtendedProperties.Where(p => (p.PropertyDefinition.PropertySetId == _myPropertySetId));
-                        //string refId = string.Empty;
-                        //int meetingKey = 0;
-                        //if (props.Count() > 0)
-                        //{
-                        //    refId = (string) props.First(p => p.PropertyDefinition.Name == "RefId").Value;
-                        //    meetingKey = (int)props.First(p => p.PropertyDefinition.Name == "MeetingKey").Value;
-                        //}
+                        try
+                        {
 
-                        int action = 99;
-                        if (evGroup.FirstOrDefault(e => e.EventType == EventType.Created) != null)
-                            action = 0; // created
-                        else if ((evGroup.FirstOrDefault(e => e.EventType == EventType.Moved) != null) && (apt.IsCancelled))
-                            action = 1; // deleted
-                        else if ((evGroup.FirstOrDefault(e => e.EventType == EventType.Modified) != null) && (!apt.IsUnmodified))
-                            action = 2; // modified
-                        else
+                            var mailboxId = appointmentTime.Organizer.Address;
+                            // Initialize the calendar folder via Impersonation
+                            ewsService.ImpersonatedUserId = new ImpersonatedUserId(ConnectingIdType.SmtpAddress, mailboxId);
+                            // Initialize the calendar folder object with only the folder ID. 
+                            var cfFolderId = new FolderId(WellKnownFolderName.Calendar, mailboxId);
+
+                            // Set the start and end time and number of appointments to retrieve.
+                            CalendarFolder calendar = CalendarFolder.Bind(ewsService, cfFolderId, new PropertySet());
+
+                            // Limit the properties returned to the appointment's subject, start time, and end time.
+                            CalendarView cView = new CalendarView(appointmentTime.Start, appointmentTime.End, EWService.Config.Exchange.BatchSize)
+                            {
+                                PropertySet = filterPropertySet
+                            };
+
+                            // Retrieve a collection of appointments by using the calendar view.
+                            FindItemsResults<Appointment> calAppointments = calendar.FindAppointments(cView);
+                            Trace.WriteLine($"The first {calAppointments.Count()} appointments on your calendar from {appointmentTime.Start.ToShortDateString()} to {appointmentTime.End.ToShortDateString()}");
+
+                            if (!calAppointments.Any())
+                            {
+                                Trace.WriteLine("This apt has no extended properties!!!");
+                            }
+                            else
+                            {
+                                var apt = calAppointments.FirstOrDefault();
+                                var props = apt.ExtendedProperties.Where(p => (p.PropertyDefinition.PropertySet == DefaultExtendedPropertySet.Meeting));
+                                string refId = string.Empty;
+                                int meetingKey = 0;
+                                if (props.Count() > 0)
+                                {
+                                    refId = (string)props.First(p => p.PropertyDefinition.Name == EWService.RefIdPropertyName).Value;
+                                    meetingKey = (int)props.First(p => p.PropertyDefinition.Name == EWService.MeetingKeyPropertyName).Value;
+                                }
+                            }
+                        }
+                        catch (ServiceResponseException ex)
+                        {
+                            Trace.WriteLine($"ServiceException: {ex.Message}", "Warning");
                             continue;
+                        }
 
-                        await _queue.SendFromO365Async(ewsService.ImpersonatedUserId.Id, apt, action);
-                        //break;
+                        await _queue.SendFromO365Async(ewsService.ImpersonatedUserId.Id, appointmentTime, action);
                     }
                 }
             };

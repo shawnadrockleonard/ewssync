@@ -639,6 +639,10 @@ namespace Microsoft.Exchange.WebServices.Data
             {
                 response = this.GetEwsHttpWebResponse(request);
             }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceInformation($"Failed in GetEwsHttp {ex.Message}");
+            }
             finally
             {
                 if (this.service.SendClientLatencies)
