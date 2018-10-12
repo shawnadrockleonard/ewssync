@@ -10,14 +10,14 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace EWSResourceSync
+namespace EWS.Common.Services
 {
     public class MessageManager
     {
         public MessageManager(CancellationToken token)
         {
             _cancel = token;
-            _sendFromO365Queue = QueueClient.CreateFromConnectionString(EWService.Config.ServiceBus.SendFromO365);
+            _sendFromO365Queue = QueueClient.CreateFromConnectionString(EWSConstants.Config.ServiceBus.SendFromO365);
         }
 
 
@@ -29,9 +29,9 @@ namespace EWSResourceSync
         {
             Trace.WriteLine($"SendFromO365Async({roomSMPT}, {apt.Subject}) starting");
 
-            var refNoProp = apt.ExtendedProperties.FirstOrDefault(p => (p.PropertyDefinition == EWService.RefIdPropertyDef));
+            var refNoProp = apt.ExtendedProperties.FirstOrDefault(p => (p.PropertyDefinition == EWSConstants.RefIdPropertyDef));
 
-            var meetingKeyProp = apt.ExtendedProperties.FirstOrDefault(p => (p.PropertyDefinition == EWService.MeetingKeyPropertyDef));
+            var meetingKeyProp = apt.ExtendedProperties.FirstOrDefault(p => (p.PropertyDefinition == EWSConstants.MeetingKeyPropertyDef));
 
             var booking = new UpdatedBooking()
             {
@@ -46,7 +46,7 @@ namespace EWSResourceSync
             };
 
             Trace.WriteLine($"{Actions[status]}: {booking.Subject}");
-            //await _sendFromO365Queue.SendAsync(new BrokeredMessage(booking));
+            await _sendFromO365Queue.SendAsync(new BrokeredMessage(booking));
             await System.Threading.Tasks.Task.FromResult(0);
             Trace.WriteLine($"SendFromO365Async() exiting");
         }
@@ -58,7 +58,7 @@ namespace EWSResourceSync
             Trace.WriteLine($"GetToO365() starting");
             await System.Threading.Tasks.Task.Run(async () =>
             {
-                var queueClient = QueueClient.CreateFromConnectionString(EWService.Config.ServiceBus.ReadToO365);
+                var queueClient = QueueClient.CreateFromConnectionString(EWSConstants.Config.ServiceBus.ReadToO365);
                 try
                 {
                     Trace.WriteLine($"GetToO365.OnMessageAsync starting");

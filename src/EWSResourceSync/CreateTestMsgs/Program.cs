@@ -1,4 +1,5 @@
 ﻿using EWS.Common;
+using EWS.Common.Services;
 using Microsoft.ServiceBus.Messaging;
 using Newtonsoft.Json;
 using System;
@@ -10,14 +11,12 @@ using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace CreateTestMsgs
+namespace EWSResourcePush
 {
     class Program
     {
         static void Main(string[] args)
         {
-            var appFile = AppSettings.Current;
-
             Console.WriteLine();
             Console.Write("Send to O365? (y/n)?");
             var key = Console.ReadKey();
@@ -25,7 +24,7 @@ namespace CreateTestMsgs
             {
                 Console.WriteLine();
                 Console.Write("Sending...");
-                var connStr = appFile.ServiceBus.SendToO365;
+                var connStr = EWSConstants.Config.ServiceBus.SendToO365;
                 var queue = QueueClient.CreateFromConnectionString(connStr);
 
                 var str = File.OpenText("bookings.json");
@@ -50,7 +49,7 @@ namespace CreateTestMsgs
             {
                 Console.WriteLine();
                 Console.WriteLine("Listening...");
-                var queueClient = QueueClient.CreateFromConnectionString(appFile.ServiceBus.ReadToO365);
+                var queueClient = QueueClient.CreateFromConnectionString(EWSConstants.Config.ServiceBus.ReadToO365);
                 queueClient.OnMessage((msg) =>
                 {
                     var booking = msg.GetBody<EWS.Common.Models.UpdatedBooking>();
@@ -68,7 +67,7 @@ namespace CreateTestMsgs
             {
                 Console.WriteLine();
                 Console.WriteLine("Listening...");
-                var queueClient = QueueClient.CreateFromConnectionString(appFile.ServiceBus.ReadFromO365);
+                var queueClient = QueueClient.CreateFromConnectionString(EWSConstants.Config.ServiceBus.ReadFromO365);
                 queueClient.OnMessage((msg) =>
                 {
                     var booking = msg.GetBody<EWS.Common.Models.UpdatedBooking>();

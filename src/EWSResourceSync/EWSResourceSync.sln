@@ -5,7 +5,7 @@ VisualStudioVersion = 15.0.27703.2047
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EWSResourceSync", "EWSResourceSync\EWSResourceSync.csproj", "{199E085D-94EC-4C2A-BB76-6CE2F503A148}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CreateTestMsgs", "CreateTestMsgs\CreateTestMsgs.csproj", "{9DF6E7E3-53CB-440E-B8FC-9396B905A49C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EWSResourcePush", "CreateTestMsgs\EWSResourcePush.csproj", "{9DF6E7E3-53CB-440E-B8FC-9396B905A49C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.Exchange.WebServices.Data", "ews-managed-api-master\Microsoft.Exchange.WebServices.Data.csproj", "{F059972F-0561-4203-ABB8-3ABB41CCBE22}"
 EndProject
@@ -16,6 +16,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EWS.Common", "EWS.Common\EWS.Common.csproj", "{8B523081-9074-4E3B-8B71-8B3331DD1EAD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EWSResourcePull", "EWSResourcePull\EWSResourcePull.csproj", "{51C55FD7-C82F-4F05-8C45-F0A1D0986292}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,6 +41,10 @@ Global
 		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{51C55FD7-C82F-4F05-8C45-F0A1D0986292}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{51C55FD7-C82F-4F05-8C45-F0A1D0986292}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{51C55FD7-C82F-4F05-8C45-F0A1D0986292}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{51C55FD7-C82F-4F05-8C45-F0A1D0986292}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

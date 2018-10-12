@@ -2,7 +2,9 @@
 using Microsoft.IdentityModel.Clients.ActiveDirectory;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
@@ -11,71 +13,143 @@ namespace EWS.Common.Services
 {
     public class EWService
     {
-        private static readonly string EWSUrl = "";
-        private static readonly string EWSAppId = "";
-        private static readonly X509Certificate2 EWSAppAuthCert;
-        private static readonly int GetUserAvailabilityBatchSize = 75;
-        static AppSettings config;
+        internal AppSettings Config { get; set; }
 
-        public const string RefIdPropertyName = "X-AptRefId";
-        public static readonly ExtendedPropertyDefinition RefIdPropertyDef;
-        public const string MeetingKeyPropertyName = "X-MeetingKey";
-        public static readonly ExtendedPropertyDefinition MeetingKeyPropertyDef;
-        public static readonly Guid _myPropertySetId = new Guid("{DAD02742-32A0-406E-950E-4957E5A394E9}");
-        public static PropertySet extendedProperties;
+        internal AuthenticationResult Tokens { get; set; }
 
-        static EWService()
+        private ExchangeService exchangeService { get; set; }
+
+        public EWService()
         {
-            config = AppSettings.Current;
-            EWSUrl = $"https://{config.Exchange.ServerName}";
-            GetUserAvailabilityBatchSize = config.Exchange.BatchSize;
-            EWSAppId = config.AzureAD.AppId;
-            EWSAppAuthCert = config.AuthCert;
+            Config = EWSConstants.Config;
+        }
 
-            RefIdPropertyDef = new ExtendedPropertyDefinition(DefaultExtendedPropertySet.Meeting, // InternetHeaders,
-                                    RefIdPropertyName,
-                                    MapiPropertyType.String);
-            MeetingKeyPropertyDef = new ExtendedPropertyDefinition(DefaultExtendedPropertySet.Meeting, // InternetHeaders,
-                                    MeetingKeyPropertyName,
-                                    MapiPropertyType.Integer);
+        public EWService(AuthenticationResult token, bool enableTracing = false) : this()
+        {
+            Tokens = token;
 
-            //RefIdPropertyDef = new ExtendedPropertyDefinition(
-            //    _myPropertySetId, "RefId", MapiPropertyType.String);
-            //MeetingKeyPropertyDef = new ExtendedPropertyDefinition(
-            //    _myPropertySetId, "MeetingKey", MapiPropertyType.Integer);
-
-
-            extendedProperties = new PropertySet(BasePropertySet.FirstClassProperties)
+            exchangeService = new ExchangeService(ExchangeVersion.Exchange2013, TimeZoneInfo.Local)
             {
-                RefIdPropertyDef,
-                MeetingKeyPropertyDef
+                Url = new Uri($"{EWSConstants.EWSUrl}/EWS/Exchange.asmx"),
+                TraceEnabled = enableTracing,
+                TraceFlags = TraceFlags.All,
+                Credentials = new OAuthCredentials(Tokens.AccessToken)
+            };
+
+        }
+
+        public ExchangeService Current
+        {
+            get
+            {
+                return exchangeService;
+            }
+        }
+
+        public string ImpersonatedId { get { return exchangeService.ImpersonatedUserId.Id; } }
+
+        public void SetImpersonation(ConnectingIdType connectingIdType, string emailAddress)
+        {
+            exchangeService.ImpersonatedUserId = new ImpersonatedUserId(connectingIdType, emailAddress);
+        }
+
+        public async System.Threading.Tasks.Task CreateExchangeServiceAsync(bool enableTrace = false)
+        {
+            var tokens = await EWSConstants.AcquireTokenAsync();
+            Tokens = tokens;
+
+            exchangeService = new ExchangeService(ExchangeVersion.Exchange2013, TimeZoneInfo.Local)
+            {
+                Url = new Uri($"{EWSConstants.EWSUrl}/EWS/Exchange.asmx"),
+                TraceEnabled = enableTrace,
+                TraceFlags = TraceFlags.All,
+                Credentials = new OAuthCredentials(Tokens.AccessToken)
             };
         }
 
         /// <summary>
-        /// The current instance.
+        /// Return rooms from the RoomList
         /// </summary>
-        public static AppSettings Config
+        /// <param name="roomName"></param>
+        /// <returns></returns>
+        public Dictionary<string, List<EmailAddress>> GetRoomListing(string roomName = null)
         {
-            get { return config; }
+            ServicePointManager.DefaultConnectionLimit = ServicePointManager.DefaultPersistentConnectionLimit;
+
+            var subs = new Dictionary<string, List<EmailAddress>>();
+
+            exchangeService.ImpersonatedUserId = new ImpersonatedUserId(ConnectingIdType.SmtpAddress, Config.Exchange.ImpersonationAcct);
+
+            // TODO: Is there a better way to enumerate a la PS Get-MailBox | Where {$_.ResourceType -eq "Room"}
+            foreach (var list in exchangeService.GetRoomLists())
+            {
+                var rooms = new List<EmailAddress>();
+                foreach (var room in exchangeService.GetRooms(list))
+                {
+                    rooms.Add(room);
+                }
+
+                subs.Add(list.Address, rooms);
+            }
+
+            return subs;
         }
 
-        public static async Task<ExchangeService> CreateExchangeServiceAsync(bool enableTrace = false)
+        /// <summary>
+        /// Creates pull subscriptiosn for the specific rooms
+        /// </summary>
+        /// <param name="timeout"></param>
+        /// <param name="watermark"></param>
+        /// <returns></returns>
+        public KeyValuePair<PullSubscription, ImpersonatedUserId> CreatePullSubscription(ConnectingIdType connectingIdType, string roomAddress, int timeout = 30, string watermark = null)
         {
-            //Trace.WriteLine($"CreateExchangeServiceAsync({impersonatedUser}, {enableTrace})");
-            var auth = new AuthenticationContext(config.AzureAD.Authority);
-            var tokens = await auth.AcquireTokenAsync(EWSUrl, new ClientAssertionCertificate(EWSAppId, EWSAppAuthCert));
+            ServicePointManager.DefaultConnectionLimit = ServicePointManager.DefaultPersistentConnectionLimit;
 
-            ExchangeService exchangeService = new ExchangeService(ExchangeVersion.Exchange2013, TimeZoneInfo.Local);
-            exchangeService.Url = new Uri($"{EWSUrl}/EWS/Exchange.asmx");
-            exchangeService.TraceEnabled = true;
-            exchangeService.TraceFlags = TraceFlags.All;
-            exchangeService.Credentials = new OAuthCredentials(tokens.AccessToken);
-            exchangeService.TraceEnabled = enableTrace;
+            try
+            {
+                // TODO: Is there a more scalable way so we don't need to subscribe to each room individually?
+                SetImpersonation(connectingIdType, roomAddress);
 
-            //Trace.WriteLine($"CreateExchangeServiceAsync({impersonatedUser}, {enableTrace} completed");
+                var sub = exchangeService.SubscribeToPullNotifications(
+                    new FolderId[] { WellKnownFolderName.Calendar },
+                    timeout,
+                    watermark,
+                    EventType.Created, EventType.Deleted, EventType.Modified, EventType.Moved, EventType.Copied);
 
-            return exchangeService;
+                Trace.WriteLine($"CreatePullSubscription {sub.Id} to room {roomAddress}");
+                return new KeyValuePair<PullSubscription, ImpersonatedUserId>(sub, exchangeService.ImpersonatedUserId);
+            }
+            catch (Microsoft.Exchange.WebServices.Data.ServiceRequestException srex)
+            {
+                Trace.WriteLine($"Failed to provision subscription {srex.Message}");
+                throw new Exception($"Subscription could not be created for {roomAddress} with MSG:{srex.Message}");
+            }
         }
+
+
+        public KeyValuePair<StreamingSubscription, ImpersonatedUserId> CreateStreamingSubscription(ConnectingIdType connectingIdType, string roomAddress, int timeout = 30)
+        {
+            ServicePointManager.DefaultConnectionLimit = ServicePointManager.DefaultPersistentConnectionLimit;
+
+            try
+            {
+                //TODO: Is there a more scalable way so we don't need to subscribe to each room individually?
+                SetImpersonation(connectingIdType, roomAddress);
+
+                // TODO: How to reconnect after app failure and get all events since failure occured
+                var sub = exchangeService.SubscribeToStreamingNotifications(
+                    new FolderId[] { WellKnownFolderName.Calendar },
+                    EventType.Created, EventType.Deleted, EventType.Modified, EventType.Moved, EventType.Copied);
+
+                Trace.WriteLine($"CreateStreamingSubscription {sub.Id} to room {roomAddress}");
+                return new KeyValuePair<StreamingSubscription, ImpersonatedUserId>(sub, exchangeService.ImpersonatedUserId);
+            }
+            catch (Microsoft.Exchange.WebServices.Data.ServiceRequestException srex)
+            {
+                Trace.WriteLine($"Failed to provision subscription {srex.Message}");
+                throw new Exception($"Subscription could not be created for {roomAddress} with MSG:{srex.Message}");
+            }
+        }
+
     }
 }

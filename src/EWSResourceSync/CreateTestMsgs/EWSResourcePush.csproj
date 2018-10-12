@@ -4,10 +4,10 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{199E085D-94EC-4C2A-BB76-6CE2F503A148}</ProjectGuid>
+    <ProjectGuid>{9DF6E7E3-53CB-440E-B8FC-9396B905A49C}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>EWSResourceSync</RootNamespace>
-    <AssemblyName>EWSResourceSync</AssemblyName>
+    <RootNamespace>EWSResourcePush</RootNamespace>
+    <AssemblyName>EWSResourcePush</AssemblyName>
     <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -20,7 +20,7 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;DISABLE_EWS</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
@@ -34,9 +34,6 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="log4net, Version=2.0.8.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
-      <HintPath>..\packages\log4net.2.0.8\lib\net45-full\log4net.dll</HintPath>
-    </Reference>
     <Reference Include="Microsoft.Azure.Services.AppAuthentication, Version=1.0.3.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.Azure.Services.AppAuthentication.1.0.3\lib\net452\Microsoft.Azure.Services.AppAuthentication.dll</HintPath>
     </Reference>
@@ -75,13 +72,12 @@
     <None Include="App.config">
       <SubType>Designer</SubType>
     </None>
+    <None Include="bookings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\ews-managed-api-master\Microsoft.Exchange.WebServices.Data.csproj">
-      <Project>{f059972f-0561-4203-abb8-3abb41ccbe22}</Project>
-      <Name>Microsoft.Exchange.WebServices.Data</Name>
-    </ProjectReference>
     <ProjectReference Include="..\EWS.Common\EWS.Common.csproj">
       <Project>{8b523081-9074-4e3b-8b71-8b3331dd1ead}</Project>
       <Name>EWS.Common</Name>
