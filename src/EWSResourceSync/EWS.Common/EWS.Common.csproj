@@ -75,6 +75,16 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AppSettings.cs" />
+    <Compile Include="Database\DefaultUsageLogger.cs" />
+    <Compile Include="Database\EntityRoomAppointment.cs" />
+    <Compile Include="Database\EntityRoomListRoom.cs" />
+    <Compile Include="Database\EntitySubscription.cs" />
+    <Compile Include="Database\EWSDbConfig.cs" />
+    <Compile Include="Database\EWSDbContext.cs" />
+    <Compile Include="Database\EWSDbContextInitializer.cs" />
+    <Compile Include="Database\EWSDbLogInterceptor.cs" />
+    <Compile Include="Database\ITraceLogger.cs" />
+    <Compile Include="Database\SubscriptionTypeEnum.cs" />
     <Compile Include="LoggedException.cs" />
     <Compile Include="Models\BlockBooking.cs" />
     <Compile Include="Models\UpdatedBooking.cs" />
@@ -93,9 +103,7 @@
       <Name>Microsoft.Exchange.WebServices.Data</Name>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Database\" />
-  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\packages\Microsoft.Azure.Services.AppAuthentication.1.0.3\build\Microsoft.Azure.Services.AppAuthentication.targets" Condition="Exists('..\packages\Microsoft.Azure.Services.AppAuthentication.1.0.3\build\Microsoft.Azure.Services.AppAuthentication.targets')" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

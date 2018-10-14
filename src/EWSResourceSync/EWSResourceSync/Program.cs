@@ -108,7 +108,7 @@ namespace EWSResourceSync
             ServicePointManager.DefaultConnectionLimit = ServicePointManager.DefaultPersistentConnectionLimit;
             service.SetImpersonation(ConnectingIdType.SmtpAddress, EWSConstants.Config.Exchange.ImpersonationAcct);
 
-            var subs = new Dictionary<StreamingSubscription, ImpersonatedUserId>();
+            var subs = new Dictionary<StreamingSubscription, string>();
 
             var roomlisting = service.GetRoomListing();
             foreach (var roomlist in roomlisting)
@@ -121,7 +121,7 @@ namespace EWSResourceSync
                         var sub = roomService.CreateStreamingSubscription(ConnectingIdType.SmtpAddress, room.Address);
 
                         Trace.WriteLine($"ListenToRoomReservationChangesAsync.Subscribed to room {room.Address}");
-                        subs.Add(sub.Key, sub.Value);
+                        subs.Add(sub, room.Address);
                     }
                     catch (Microsoft.Exchange.WebServices.Data.ServiceRequestException sex)
                     {
@@ -184,7 +184,7 @@ namespace EWSResourceSync
 
                         try
                         {
-                            ewsService.ImpersonatedUserId = new ImpersonatedUserId(ConnectingIdType.SmtpAddress, subscription.Value.Id);
+                            ewsService.ImpersonatedUserId = new ImpersonatedUserId(ConnectingIdType.SmtpAddress, subscription.Value);
                             appointmentTime = (Appointment)Item.Bind(ewsService, itemId);
 
 

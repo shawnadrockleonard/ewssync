@@ -1,4 +1,5 @@
 ﻿using EWS.Common;
+using EWS.Common.Database;
 using EWS.Common.Services;
 using Microsoft.Exchange.WebServices.Data;
 using System;
@@ -14,6 +15,7 @@ namespace EWSResourcePull
 {
     class Program
     {
+        const int timeout = 30;
         static string mailboxOwner = "";
         MessageManager _queue;
         private System.Threading.CancellationTokenSource CancellationTokenSource = new System.Threading.CancellationTokenSource();
@@ -53,40 +55,72 @@ namespace EWSResourcePull
             var ewsservice = new EWService(ewstoken);
             _queue = new MessageManager(CancellationTokenSource.Token);
 
-            try
+            using (var ewsDatabase = new EWSDbContext(EWSConstants.Config.Database))
             {
-                var subscriptions = new Dictionary<PullSubscription, ImpersonatedUserId>();
-                var roomlisting = ewsservice.GetRoomListing();
-                foreach (var roomlist in roomlisting)
+
+
+                try
                 {
-                    foreach (var room in roomlist.Value)
+                    var subscriptions = new Dictionary<PullSubscription, string>();
+                    var roomlisting = ewsservice.GetRoomListing();
+                    foreach (var roomlist in roomlisting)
                     {
-                        var roomservice = new EWService(ewstoken);
-                        var subscription = roomservice.CreatePullSubscription(ConnectingIdType.SmtpAddress, room.Address, 30);
-                        subscriptions.Add(subscription.Key, subscription.Value);
+                        foreach (var room in roomlist.Value)
+                        {
+                            var roomservice = new EWService(ewstoken);
+
+                            var roomsubs = ewsDatabase.SubscriptionEntities.Where(w => w.SmtpAddress == room.Address);
+                            EntitySubscription dbSubscription = null;
+                            string watermark = null;
+                            if (roomsubs.Any(rs => rs.SubscriptionType == SubscriptionTypeEnum.PullSubscription && !rs.Terminated))
+                            {
+                                dbSubscription = roomsubs.FirstOrDefault(fd => fd.SubscriptionType == SubscriptionTypeEnum.PullSubscription && !fd.Terminated);
+                                watermark = dbSubscription.Watermark;
+                            }
+                            else
+                            {
+                                dbSubscription = new EntitySubscription()
+                                {
+                                    LastRunTime = DateTime.UtcNow,
+                                    SubscriptionType = SubscriptionTypeEnum.PullSubscription,
+                                    SmtpAddress = room.Address
+                                };
+                                ewsDatabase.SubscriptionEntities.Add(dbSubscription);
+                            }
+
+                            var subscription = roomservice.CreatePullSubscription(ConnectingIdType.SmtpAddress, room.Address, timeout, watermark);
+                            dbSubscription.Watermark = subscription.Watermark;
+                            dbSubscription.Id = subscription.Id;
+                            subscriptions.Add(subscription, room.Address);
+                        }
+
+                        var rowChanged = ewsDatabase.SaveChanges();
+                        Trace.WriteLine($"Pull subscription persisted {rowChanged} rows");
                     }
-                }
 
-                var waitTimer = new TimeSpan(0, 5, 0);
-                while (!CancellationTokenSource.IsCancellationRequested)
+                    var waitTimer = new TimeSpan(0, 5, 0);
+                    while (!CancellationTokenSource.IsCancellationRequested)
+                    {
+                        var milliseconds = (int)waitTimer.TotalMilliseconds;
+                        PullRoomReservationChanges_Tick(ewsDatabase, ewsservice, subscriptions);
+                        Trace.WriteLine($"Sleeping for {milliseconds} milliseconds...");
+                        System.Threading.Thread.Sleep(milliseconds);
+                    }
+
+                    subscriptions.Keys.ToList().ForEach(f => { f.Unsubscribe(); });
+
+                }
+                catch (Exception ex)
                 {
-                    var milliseconds = (int)waitTimer.TotalMilliseconds;
-                    PullRoomReservationChanges_Tick(ewsservice, subscriptions);
-                    Trace.WriteLine($"Sleeping for {milliseconds} milliseconds...");
-                    System.Threading.Thread.Sleep(milliseconds);
+                    Console.WriteLine(ex.Message);
                 }
 
-                subscriptions.Keys.ToList().ForEach(f => { f.Unsubscribe(); });
 
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
             }
         }
 
 
-        private void PullRoomReservationChanges_Tick(EWService ewsService, Dictionary<PullSubscription, ImpersonatedUserId> subs)
+        private void PullRoomReservationChanges_Tick(EWSDbContext ewsDatabase, EWService ewsService, Dictionary<PullSubscription, string> subs)
         {
             // whatever you want to happen every 5 minutes
             Trace.WriteLine($"PullRoomReservationChangesAsync({mailboxOwner}) starting at {DateTime.UtcNow.ToShortTimeString()}");
@@ -127,7 +161,7 @@ namespace EWSResourcePull
                     var subscriptionitem = subs.FirstOrDefault(k => k.Key.Id == subscription.Id);
                     try
                     {
-                        ewsService.SetImpersonation(ConnectingIdType.SmtpAddress, item.Value.Id);
+                        ewsService.SetImpersonation(ConnectingIdType.SmtpAddress, item.Value);
                         var appointmentTime = (Appointment)Item.Bind(ewsService.Current, itemId);
 
 

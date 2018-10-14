@@ -22,6 +22,9 @@ namespace EWS.Common
 
         [JsonProperty(PropertyName = "queues")]
         public SettingsQueues ServiceBus { get; set; }
+
+        [JsonProperty(PropertyName = "database")]
+        public string Database { get; set; }
     }
 
     public class SettingsAzureAD

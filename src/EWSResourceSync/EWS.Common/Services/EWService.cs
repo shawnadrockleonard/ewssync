@@ -101,13 +101,12 @@ namespace EWS.Common.Services
         /// <param name="timeout"></param>
         /// <param name="watermark"></param>
         /// <returns></returns>
-        public KeyValuePair<PullSubscription, ImpersonatedUserId> CreatePullSubscription(ConnectingIdType connectingIdType, string roomAddress, int timeout = 30, string watermark = null)
+        public PullSubscription CreatePullSubscription(ConnectingIdType connectingIdType, string roomAddress, int timeout = 30, string watermark = null)
         {
             ServicePointManager.DefaultConnectionLimit = ServicePointManager.DefaultPersistentConnectionLimit;
 
             try
             {
-                // TODO: Is there a more scalable way so we don't need to subscribe to each room individually?
                 SetImpersonation(connectingIdType, roomAddress);
 
                 var sub = exchangeService.SubscribeToPullNotifications(
@@ -117,7 +116,7 @@ namespace EWS.Common.Services
                     EventType.Created, EventType.Deleted, EventType.Modified, EventType.Moved, EventType.Copied);
 
                 Trace.WriteLine($"CreatePullSubscription {sub.Id} to room {roomAddress}");
-                return new KeyValuePair<PullSubscription, ImpersonatedUserId>(sub, exchangeService.ImpersonatedUserId);
+                return sub;
             }
             catch (Microsoft.Exchange.WebServices.Data.ServiceRequestException srex)
             {
@@ -126,8 +125,14 @@ namespace EWS.Common.Services
             }
         }
 
-
-        public KeyValuePair<StreamingSubscription, ImpersonatedUserId> CreateStreamingSubscription(ConnectingIdType connectingIdType, string roomAddress, int timeout = 30)
+        /// <summary>
+        /// Creates streaming subscription for the specific room
+        /// </summary>
+        /// <param name="connectingIdType"></param>
+        /// <param name="roomAddress"></param>
+        /// <param name="timeout"></param>
+        /// <returns></returns>
+        public StreamingSubscription CreateStreamingSubscription(ConnectingIdType connectingIdType, string roomAddress, int timeout = 30)
         {
             ServicePointManager.DefaultConnectionLimit = ServicePointManager.DefaultPersistentConnectionLimit;
 
@@ -142,7 +147,7 @@ namespace EWS.Common.Services
                     EventType.Created, EventType.Deleted, EventType.Modified, EventType.Moved, EventType.Copied);
 
                 Trace.WriteLine($"CreateStreamingSubscription {sub.Id} to room {roomAddress}");
-                return new KeyValuePair<StreamingSubscription, ImpersonatedUserId>(sub, exchangeService.ImpersonatedUserId);
+                return sub;
             }
             catch (Microsoft.Exchange.WebServices.Data.ServiceRequestException srex)
             {
