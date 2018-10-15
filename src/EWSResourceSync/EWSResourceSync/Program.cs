@@ -63,40 +63,6 @@ namespace EWSResourceSync
             }
         }
 
-        public class ItemEventComparer : IEqualityComparer<ItemEvent>
-        {
-            public bool Equals(ItemEvent x, ItemEvent y)
-            {
-                // If reference same object including null then return true
-                if (object.ReferenceEquals(x, y))
-                {
-                    return true;
-                }
-
-                // If one object null the return false
-                if (object.ReferenceEquals(x, null) || object.ReferenceEquals(y, null))
-                {
-                    return false;
-                }
-
-                // Compare properties for equality
-                return (x.ItemId == y.ItemId && x.EventType == y.EventType
-);
-            }
-
-            public int GetHashCode(ItemEvent obj)
-            {
-                if (object.ReferenceEquals(obj, null))
-                {
-                    return 0;
-                }
-
-                int EventTypeHash = obj.EventType.GetHashCode();
-                int ItemIdHash = obj.ItemId.GetHashCode();
-
-                return EventTypeHash ^ ItemIdHash;
-            }
-        }
 
         // # TODO: Need to handle subscription for re-hydration
         // # TODO: evaluate why extension attributes are not returned in listener
@@ -185,7 +151,7 @@ namespace EWSResourceSync
                         try
                         {
                             ewsService.ImpersonatedUserId = new ImpersonatedUserId(ConnectingIdType.SmtpAddress, subscription.Value);
-                            appointmentTime = (Appointment)Item.Bind(ewsService, itemId);
+                            appointmentTime = (Appointment)Item.Bind(ewsService, itemId, filterPropertySet);
 
 
 

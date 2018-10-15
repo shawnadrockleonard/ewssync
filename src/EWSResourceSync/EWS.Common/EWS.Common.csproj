@@ -87,10 +87,12 @@
     <Compile Include="Database\SubscriptionTypeEnum.cs" />
     <Compile Include="LoggedException.cs" />
     <Compile Include="Models\BlockBooking.cs" />
+    <Compile Include="Models\SubscriptionCollection.cs" />
     <Compile Include="Models\UpdatedBooking.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\EWSConstants.cs" />
     <Compile Include="Services\EWService.cs" />
+    <Compile Include="Services\ItemEventComparer.cs" />
     <Compile Include="Services\MessageManager.cs" />
   </ItemGroup>
   <ItemGroup>

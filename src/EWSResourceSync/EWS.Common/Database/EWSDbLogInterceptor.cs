@@ -77,8 +77,8 @@ namespace EWS.Common.Database
         {
             if (!interceptionContext.IsAsync)
             {
-                //dblogger.LogInformation("Non-async command used: {0}", command.CommandText);
-                //LogParametersIfNonAsync(command);
+                dblogger.LogInformation("Non-async command used: {0}", command.CommandText);
+                LogParametersIfNonAsync(command);
             }
         }
 

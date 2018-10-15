@@ -94,7 +94,7 @@ namespace Microsoft.Exchange.WebServices.Data
         /// Gets the session.
         /// </summary>
         /// <value>The session.</value>
-        internal ExchangeService Service
+        public ExchangeService Service
         {
             get { return this.service; }
         }
