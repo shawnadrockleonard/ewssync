@@ -1,4 +1,5 @@
-﻿using Microsoft.Exchange.WebServices.Data;
+﻿using EWS.Common.Models;
+using Microsoft.Exchange.WebServices.Data;
 using Microsoft.IdentityModel.Clients.ActiveDirectory;
 using System;
 using System.Collections.Generic;
@@ -98,8 +99,8 @@ namespace EWS.Common.Services
         /// <summary>
         /// Creates pull subscriptiosn for the specific rooms
         /// </summary>
-        /// <param name="timeout"></param>
-        /// <param name="watermark"></param>
+        /// <param name="timeout">The timeout, in minutes, after which the subscription expires. Timeout must be between 1 and 1440.</param>
+        /// <param name="watermark">An optional watermark representing a previously opened subscription.</param>
         /// <returns></returns>
         public PullSubscription CreatePullSubscription(ConnectingIdType connectingIdType, string roomAddress, int timeout = 30, string watermark = null)
         {
@@ -130,9 +131,10 @@ namespace EWS.Common.Services
         /// </summary>
         /// <param name="connectingIdType"></param>
         /// <param name="roomAddress"></param>
-        /// <param name="timeout"></param>
+        /// <param name="timeout">The timeout, in minutes, after which the subscription expires. Timeout must be between 1 and 1440.</param>
+        /// <param name="watermark">An optional watermark representing a previously opened subscription.</param>
         /// <returns></returns>
-        public StreamingSubscription CreateStreamingSubscription(ConnectingIdType connectingIdType, string roomAddress, int timeout = 30)
+        public StreamingSubscription CreateStreamingSubscription(ConnectingIdType connectingIdType, string roomAddress, int timeout = 30, string watermark = null)
         {
             ServicePointManager.DefaultConnectionLimit = ServicePointManager.DefaultPersistentConnectionLimit;
 
@@ -144,7 +146,9 @@ namespace EWS.Common.Services
                 // TODO: How to reconnect after app failure and get all events since failure occured
                 var sub = exchangeService.SubscribeToStreamingNotifications(
                     new FolderId[] { WellKnownFolderName.Calendar },
+                    watermark,
                     EventType.Created, EventType.Deleted, EventType.Modified, EventType.Moved, EventType.Copied);
+
 
                 Trace.WriteLine($"CreateStreamingSubscription {sub.Id} to room {roomAddress}");
                 return sub;
@@ -154,6 +158,34 @@ namespace EWS.Common.Services
                 Trace.WriteLine($"Failed to provision subscription {srex.Message}");
                 throw new Exception($"Subscription could not be created for {roomAddress} with MSG:{srex.Message}");
             }
+        }
+
+
+        public AppointmentObjectId GetAppointment(ExchangeService exchangeService, ItemId itemId, PropertySet filterPropertySet)
+        {
+            var appointmentTime = Appointment.Bind(exchangeService, itemId, filterPropertySet);
+
+
+            ExtendedPropertyDefinition CleanGlobalObjectId = new ExtendedPropertyDefinition(DefaultExtendedPropertySet.Meeting, 0x23, MapiPropertyType.Binary);
+            PropertySet psPropSet = new PropertySet(BasePropertySet.FirstClassProperties)
+            {
+                CleanGlobalObjectId
+            };
+            appointmentTime.Load(psPropSet);
+            appointmentTime.TryGetProperty(CleanGlobalObjectId, out object CalIdVal);
+
+
+            var objectId = new AppointmentObjectId()
+            {
+                Id = itemId,
+                Item = appointmentTime,
+                Base64UniqueId = Convert.ToBase64String((Byte[])CalIdVal),
+                ICalUid = appointmentTime.ICalUid,
+                Organizer = appointmentTime.Organizer
+            };
+
+
+            return objectId;
         }
 
     }

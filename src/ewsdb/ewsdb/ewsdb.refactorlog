@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Operations Version="1.0" xmlns="http://schemas.microsoft.com/sqlserver/dac/Serialization/2012/02">
+  <Operation Name="Rename Refactor" Key="cd9a9e88-ddb9-4166-8d16-fb18a8d3db47" ChangeDateTime="10/23/2018 03:44:59">
+    <Property Name="ElementName" Value="[dbo].[Subscriptions].[Id]" />
+    <Property Name="ElementType" Value="SqlSimpleColumn" />
+    <Property Name="ParentElementName" Value="[dbo].[Subscriptions]" />
+    <Property Name="ParentElementType" Value="SqlTable" />
+    <Property Name="NewName" Value="SubscriptionId" />
+  </Operation>
+  <Operation Name="Rename Refactor" Key="8bb29507-5c4d-4747-a3c1-b8f60a6ad33f" ChangeDateTime="10/23/2018 03:45:27">
+    <Property Name="ElementName" Value="[dbo].[Subscriptions].[Watermark]" />
+    <Property Name="ElementType" Value="SqlSimpleColumn" />
+    <Property Name="ParentElementName" Value="[dbo].[Subscriptions]" />
+    <Property Name="ParentElementType" Value="SqlTable" />
+    <Property Name="NewName" Value="PreviousWatermark" />
+  </Operation>
+</Operations>

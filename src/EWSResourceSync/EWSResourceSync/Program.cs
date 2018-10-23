@@ -138,6 +138,8 @@ namespace EWSResourceSync
                     var itemId = evGroup.Key;
 
                     var unfilteredEvents = evGroup.ToList();
+
+                    // TODO: Application centric notification stream (Needs to handle all of the Events - process in linear fashion)
                     var filterEvents = unfilteredEvents.Distinct(new ItemEventComparer()).OrderByDescending(x => x.TimeStamp);
                     foreach (ItemEvent ev in filterEvents)
                     {
@@ -344,5 +346,144 @@ namespace EWSResourceSync
             // TODO: The room will may decline if booked. Always declines for past dates. See also: https://social.msdn.microsoft.com/Forums/exchange/en-US/cead7451-dcc5-46b9-b225-b16874fdc914/ews-confirming-room-response-accepteddeclined-when-creating-appointment-where-room-is-invited
 
         }
+
+
+        void ShowMoreInfo(object e)
+        {
+            // Get more info for the given item.  This will run on it's own thread
+            // so that the main program can continue as usual (we won't hold anything up)
+
+            NotificationInfo n = (NotificationInfo)e;
+
+            ExchangeService ewsMoreInfoService = new ExchangeService(n.Service.RequestedServerVersion);
+            ewsMoreInfoService.Credentials = new WebCredentials(textBoxUsername.Text, textBoxPassword.Text);
+            ewsMoreInfoService.UseDefaultCredentials = false;
+            ewsMoreInfoService.ImpersonatedUserId = new ImpersonatedUserId(ConnectingIdType.SmtpAddress, n.Mailbox);
+            ewsMoreInfoService.Url = n.Service.Url;
+            ewsMoreInfoService.TraceListener = _traceListener;
+            ewsMoreInfoService.TraceFlags = TraceFlags.All;
+            ewsMoreInfoService.TraceEnabled = true;
+
+            string sEvent = "";
+            if (n.Event is ItemEvent)
+            {
+                sEvent = n.Mailbox + ": Item " + (n.Event as ItemEvent).EventType.ToString() + ": " + MoreItemInfo(n.Event as ItemEvent, ewsMoreInfoService);
+            }
+            else
+                sEvent = n.Mailbox + ": Folder " + (n.Event as FolderEvent).EventType.ToString() + ": " + MoreFolderInfo(n.Event as FolderEvent, ewsMoreInfoService);
+
+            ShowEvent(sEvent);
+        }
+
+        private void ShowEvent(string eventDetails)
+        {
+            try
+            {
+
+            }
+            catch (Exception ex)
+            {
+               Trace.WriteLine($"Ex {ex.Message} Error");
+            }
+        }
+
+        private string MoreItemInfo(ItemEvent e, ExchangeService service)
+        {
+            string sMoreInfo = "";
+            if (e.EventType == EventType.Deleted)
+            {
+                // We cannot get more info for a deleted item by binding to it, so skip item details
+            }
+            else
+                sMoreInfo += "Item subject=" + GetItemInfo(e.ItemId, service);
+
+            if (e.ParentFolderId != null)
+            {
+                if (!String.IsNullOrEmpty(sMoreInfo)) sMoreInfo += ", ";
+                sMoreInfo += "Parent Folder Name=" + GetFolderName(e.ParentFolderId, service);
+            }
+            return sMoreInfo;
+        }
+
+        private string MoreFolderInfo(FolderEvent e, ExchangeService service)
+        {
+            string sMoreInfo = "";
+            if (e.EventType == EventType.Deleted)
+            {
+                // We cannot get more info for a deleted item by binding to it, so skip item details
+            }
+            else
+                sMoreInfo += "Folder name=" + GetFolderName(e.FolderId, service);
+            if (e.ParentFolderId != null)
+            {
+                if (!String.IsNullOrEmpty(sMoreInfo)) sMoreInfo += ", ";
+                sMoreInfo += "Parent Folder Name=" + GetFolderName(e.ParentFolderId, service);
+            }
+            return sMoreInfo;
+        }
+
+        private string GetItemInfo(ItemId itemId, ExchangeService service)
+        {
+            // Retrieve the subject for a given item
+            string sItemInfo = "";
+            Item oItem;
+            PropertySet oPropertySet;
+
+
+                oPropertySet = new PropertySet(ItemSchema.Subject);
+
+            try
+            {
+                oItem = Item.Bind(service, itemId, oPropertySet);
+            }
+            catch (Exception ex)
+            {
+                return ex.Message;
+            }
+
+            if (oItem is Appointment)
+            {
+                sItemInfo += "Appointment subject=" + oItem.Subject;
+                // Show attendee information
+                Appointment oAppt = oItem as Appointment;
+                sItemInfo += ",RequiredAttendees=" + GetAttendees(oAppt.RequiredAttendees);
+                sItemInfo += ",OptionalAttendees=" + GetAttendees(oAppt.OptionalAttendees);
+            }
+            else
+                sItemInfo += "Item subject=" + oItem.Subject;
+
+
+            return sItemInfo;
+        }
+
+        private string GetAttendees(AttendeeCollection attendees)
+        {
+            if (attendees.Count == 0) return "none";
+
+            string sAttendees = "";
+            foreach (Attendee attendee in attendees)
+            {
+                if (!String.IsNullOrEmpty(sAttendees))
+                    sAttendees += ", ";
+                sAttendees += attendee.Name;
+            }
+
+            return sAttendees;
+        }
+
+        private string GetFolderName(FolderId folderId, ExchangeService service)
+        {
+            // Retrieve display name of the given folder
+            try
+            {
+                Folder oFolder = Folder.Bind(service, folderId, new PropertySet(FolderSchema.DisplayName));
+                return oFolder.DisplayName;
+            }
+            catch (Exception ex)
+            {
+                return ex.Message;
+            }
+        }
+
     }
 }

@@ -87,6 +87,7 @@
     <Compile Include="Database\SubscriptionTypeEnum.cs" />
     <Compile Include="LoggedException.cs" />
     <Compile Include="Models\BlockBooking.cs" />
+    <Compile Include="Models\NotificationInfo.cs" />
     <Compile Include="Models\SubscriptionCollection.cs" />
     <Compile Include="Models\UpdatedBooking.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

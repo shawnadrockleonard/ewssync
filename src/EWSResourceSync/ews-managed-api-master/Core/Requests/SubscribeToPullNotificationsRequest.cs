@@ -51,6 +51,7 @@ namespace Microsoft.Exchange.WebServices.Data
         internal override void Validate()
         {
             base.Validate();
+
             if ((this.Timeout < 1) || (this.Timeout > 1440))
             {
                 throw new ArgumentException(string.Format(Strings.InvalidTimeoutValue, this.Timeout));
