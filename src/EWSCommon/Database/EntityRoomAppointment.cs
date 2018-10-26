@@ -22,7 +22,7 @@ namespace EWS.Common.Database
         [Key()]
         public int Id { get; set; }
 
-
+        [MaxLength(255)]
         public string OrganizerSmtpAddress { get; set; }
 
         [Required]
@@ -72,13 +72,15 @@ namespace EWS.Common.Database
         public bool ExistsInExchange { get; set; }
 
 
-        public DateTime? ModifiedDate { get; set; }
-
         public bool SyncedWithExchange { get; set; }
+
+
+        public bool IsDeleted { get; set; }
 
 
         public bool DeletedLocally { get; set; }
 
-        public bool IsDeleted { get; set; }
+
+        public DateTime? ModifiedDate { get; set; }
     }
 }

@@ -5,16 +5,17 @@ VisualStudioVersion = 15.0.27703.2047
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EWSResourceSync", "EWSResourceSync\EWSResourceSync.csproj", "{199E085D-94EC-4C2A-BB76-6CE2F503A148}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{91C0A224-9AE9-4CB0-BA9F-FA5CD093A219}"
-	ProjectSection(SolutionItems) = preProject
-		..\..\_keys\system_config.json = ..\..\_keys\system_config.json
-	EndProjectSection
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EWSResourcePull", "EWSResourcePull\EWSResourcePull.csproj", "{51C55FD7-C82F-4F05-8C45-F0A1D0986292}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.Exchange.WebServices.Data", "ews-managed-api-master\Microsoft.Exchange.WebServices.Data.csproj", "{F059972F-0561-4203-ABB8-3ABB41CCBE22}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EWS.Common", "EWSCommon\EWS.Common.csproj", "{8B523081-9074-4E3B-8B71-8B3331DD1EAD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EWSServiceBusReadFromO365", "EWSServiceBusReadFromO365\EWSServiceBusReadFromO365.csproj", "{9DF6E7E3-53CB-440E-B8FC-9396B905A49C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EWSServiceBusSendToO365", "EWSServiceBusSendToO365\EWSServiceBusSendToO365.csproj", "{8D1DA3A7-AF99-43FD-A24B-3C64522B4DE1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "serviceBus", "serviceBus", "{C5538813-0F36-48AD-91B9-705653EBAB45}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "managed-api", "managed-api", "{2590A66F-2FE3-4615-9038-9E2F7F3F01D2}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -26,10 +27,6 @@ Global
 		{199E085D-94EC-4C2A-BB76-6CE2F503A148}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{199E085D-94EC-4C2A-BB76-6CE2F503A148}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{199E085D-94EC-4C2A-BB76-6CE2F503A148}.Release|Any CPU.Build.0 = Release|Any CPU
-		{51C55FD7-C82F-4F05-8C45-F0A1D0986292}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{51C55FD7-C82F-4F05-8C45-F0A1D0986292}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{51C55FD7-C82F-4F05-8C45-F0A1D0986292}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{51C55FD7-C82F-4F05-8C45-F0A1D0986292}.Release|Any CPU.Build.0 = Release|Any CPU
 		{F059972F-0561-4203-ABB8-3ABB41CCBE22}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F059972F-0561-4203-ABB8-3ABB41CCBE22}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F059972F-0561-4203-ABB8-3ABB41CCBE22}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -38,9 +35,22 @@ Global
 		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9DF6E7E3-53CB-440E-B8FC-9396B905A49C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9DF6E7E3-53CB-440E-B8FC-9396B905A49C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9DF6E7E3-53CB-440E-B8FC-9396B905A49C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9DF6E7E3-53CB-440E-B8FC-9396B905A49C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8D1DA3A7-AF99-43FD-A24B-3C64522B4DE1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8D1DA3A7-AF99-43FD-A24B-3C64522B4DE1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8D1DA3A7-AF99-43FD-A24B-3C64522B4DE1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8D1DA3A7-AF99-43FD-A24B-3C64522B4DE1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{F059972F-0561-4203-ABB8-3ABB41CCBE22} = {2590A66F-2FE3-4615-9038-9E2F7F3F01D2}
+		{9DF6E7E3-53CB-440E-B8FC-9396B905A49C} = {C5538813-0F36-48AD-91B9-705653EBAB45}
+		{8D1DA3A7-AF99-43FD-A24B-3C64522B4DE1} = {C5538813-0F36-48AD-91B9-705653EBAB45}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {11D656BE-C937-464A-94AC-448FCCDA0773}

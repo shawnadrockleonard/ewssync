@@ -14,36 +14,41 @@ using System.Data.Entity;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Threading.Tasks;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 
-namespace EWSServiceBusO365Subscription
+namespace EWSServiceBusReadFromO365
 {
     /// <summary>
     /// Reader from O365 Events from the StreamingSubscription
     /// </summary>
     class Program
     {
-        private static System.Threading.CancellationTokenSource CancellationTokenSource = new System.Threading.CancellationTokenSource();
+        static private System.Threading.CancellationTokenSource CancellationTokenSource = new System.Threading.CancellationTokenSource();
+        static private bool IsDisposed { get; set; }
+        static MessageManager Messenger { get; set; }
 
         static void Main(string[] args)
         {
-            Console.WriteLine("Get msgs from O365 Subscription");
+            Trace.Listeners.Add(new TextWriterTraceListener(Console.Out));
+            Trace.AutoFlush = true;
+            Trace.WriteLine("Capturing Reading from O365 ...");
 
-            Console.WriteLine();
-            Console.WriteLine("Listening...");
+            _handler += new EventHandler(ConsoleCtrlCheck);
+            SetConsoleCtrlHandler(_handler, true);
 
             var p = new Program();
 
             var service = System.Threading.Tasks.Task.Run(async () =>
             {
-                Console.WriteLine("In Thread run await....");
+                Trace.WriteLine("In Thread run await....");
                 await p.RunAsync();
 
             }, CancellationTokenSource.Token);
             service.Wait();
 
 
-
-            Console.WriteLine("Done.   Press any key to terminate.");
+            Trace.WriteLine("Done.   Press any key to terminate.");
             Console.ReadLine();
         }
 
@@ -52,134 +57,74 @@ namespace EWSServiceBusO365Subscription
 
         }
 
-
-        private EWSDbContext EwsDatabase { get; set; }
-        private bool IsDisposed { get; set; }
-        private EWService EwsService { get; set; }
-        private AuthenticationResult Ewstoken { get; set; }
-
-
         async private System.Threading.Tasks.Task RunAsync()
         {
-            Ewstoken = await EWSConstants.AcquireTokenAsync();
+            IsDisposed = false;
 
-            EwsService = new EWService(Ewstoken);
-
-            EwsDatabase = new EWSDbContext(EWSConstants.Config.Database);
+            var Ewstoken = await EWSConstants.AcquireTokenAsync();
 
 
-            var queueClient = QueueClient.CreateFromConnectionString(EWSConstants.Config.ServiceBus.O365Subscription);
-            queueClient.OnMessage((msg) =>
-            {
-
-                // #TODO: Read bus events from O365 and write to Database
-                var booking = msg.GetBody<EWS.Common.Models.UpdatedBooking>();
-                Console.WriteLine($"Msg received: {booking.SiteMailBox} - {booking.Subject}. Cancel status: {booking.ExchangeEvent.ToString("f")}");
+            Messenger = new MessageManager(CancellationTokenSource, Ewstoken);
 
 
-                var itemId = booking.ExchangeItem;
-                var appointmentMailbox = booking.SiteMailBox;
 
-                var dbroom = EwsDatabase.RoomListRoomEntities.FirstOrDefaultAsync(f => f.SmtpAddress == appointmentMailbox);
+            var queueSubscription = EWSConstants.Config.ServiceBus.O365Subscription;
+            var receiveO365Subscriptions = Messenger.ReceiveQueueO365ChangesAsync(queueSubscription);
 
-                IList<PropertyDefinitionBase> propertyCollection = new List<PropertyDefinitionBase>()
-                {
-                    AppointmentSchema.Location,
-                    ItemSchema.Subject,
-                    AppointmentSchema.Start,
-                    AppointmentSchema.End,
-                    AppointmentSchema.IsMeeting,
-                    AppointmentSchema.IsOnlineMeeting,
-                    AppointmentSchema.IsAllDayEvent,
-                    AppointmentSchema.IsRecurring,
-                    AppointmentSchema.IsCancelled,
-                    ItemSchema.IsUnmodified,
-                    AppointmentSchema.TimeZone,
-                    AppointmentSchema.ICalUid,
-                    ItemSchema.ParentFolderId,
-                    ItemSchema.ConversationId,
-                    AppointmentSchema.ICalRecurrenceId,
-                    AppointmentSchema.Recurrence,
-                    EWSConstants.RefIdPropertyDef,
-                    EWSConstants.DatabaseIdPropertyDef
-                };
-
-                if (booking.ExchangeEvent == EventType.Deleted)
-                {
-
-                    var entity = EwsDatabase.AppointmentEntities.FirstOrDefault(f => f.BookingId == itemId.UniqueId);
-                    entity.IsDeleted = true;
-                    entity.ModifiedDate = DateTime.UtcNow;
-                    entity.SyncedWithExchange = true;
-                    entity.ExistsInExchange = true;
-
-                }
-                else
-                {
-                    var appointmentTime = EwsService.GetAppointment(ConnectingIdType.SmtpAddress, booking.SiteMailBox, itemId, propertyCollection);
+            var queueSync = EWSConstants.Config.ServiceBus.O365Sync;
+            var receiveO365Sync = Messenger.ReceiveQueueO365SyncFoldersAsync(queueSync);
 
 
-                    var icalId = appointmentTime.ICalUid;
-                    var mailboxId = appointmentTime.Organizer.Address;
-
-                    try
-                    {
-                        var ownerAppointment = EwsService.GetParentAppointment(appointmentTime, propertyCollection);
-                        var ownerAppointmentTime = ownerAppointment.Item;
-
-                        var owernApptId = ownerAppointmentTime.Id;
-                        var refId = ownerAppointment.ReferenceId;
-                        var meetingKey = ownerAppointment.MeetingKey;
-
-
-                        // TODO: move this to the ServiceBus Processing
-                        if ((!string.IsNullOrEmpty(refId) || meetingKey.HasValue)
-                            && EwsDatabase.AppointmentEntities.Any(f => f.BookingReference == refId || f.Id == meetingKey))
-                        {
-                            var entity = EwsDatabase.AppointmentEntities.FirstOrDefault(f => f.BookingReference == refId || f.Id == meetingKey);
-
-                            entity.EndUTC = ownerAppointmentTime.End.ToUniversalTime();
-                            entity.StartUTC = ownerAppointmentTime.Start.ToUniversalTime();
-                            entity.ExistsInExchange = true;
-                            entity.IsRecurringMeeting = ownerAppointmentTime.IsRecurring;
-                            entity.Location = ownerAppointmentTime.Location;
-                            entity.OrganizerSmtpAddress = mailboxId;
-                            entity.Subject = ownerAppointmentTime.Subject;
-                            entity.RecurrencePattern = (ownerAppointmentTime.Recurrence == null) ? string.Empty : ownerAppointmentTime.Recurrence.ToString();
-                            entity.BookingReference = refId;
-                        }
-                        else
-                        {
-                            var entity = new EntityRoomAppointment()
-                            {
-                                BookingReference = refId,
-                                BookingId = itemId.UniqueId,
-                                EndUTC = ownerAppointmentTime.End.ToUniversalTime(),
-                                StartUTC = ownerAppointmentTime.Start.ToUniversalTime(),
-                                ExistsInExchange = true,
-                                IsRecurringMeeting = ownerAppointmentTime.IsRecurring,
-                                Location = ownerAppointmentTime.Location,
-                                OrganizerSmtpAddress = mailboxId,
-                                Subject = ownerAppointmentTime.Subject,
-                                RecurrencePattern = (ownerAppointmentTime.Recurrence == null) ? string.Empty : ownerAppointmentTime.Recurrence.ToString(),
-                                Room = dbroom.Result
-                            };
-                            EwsDatabase.AppointmentEntities.Add(entity);
-                        }
-
-
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error retreiving calendar {mailboxId} msg:{ex.Message}");
-                    }
-                }
-
-                msg.Complete();
-
-            }, new OnMessageOptions() { AutoComplete = true, MaxConcurrentCalls = 5 });
-            queueClient.Close();
-
+            await System.Threading.Tasks.Task.WhenAll(
+                // receive syncfolder events
+                receiveO365Sync,
+                // receive queue messages
+                receiveO365Subscriptions
+            );
         }
+
+
+        #region Trap application termination
+
+        [DllImport("Kernel32")]
+        private static extern bool SetConsoleCtrlHandler(EventHandler handler, bool add);
+
+        private delegate bool EventHandler(CtrlType sig);
+        static EventHandler _handler;
+
+        enum CtrlType
+        {
+            CTRL_C_EVENT = 0,
+            CTRL_BREAK_EVENT = 1,
+            CTRL_CLOSE_EVENT = 2,
+            CTRL_LOGOFF_EVENT = 5,
+            CTRL_SHUTDOWN_EVENT = 6
+        }
+
+        private static bool ConsoleCtrlCheck(CtrlType sig)
+        {
+            Trace.WriteLine("Exiting system due to external CTRL-C, or process kill, or shutdown");
+
+            // should cancel all registered events
+            CancellationTokenSource.Cancel();
+
+            // issue into messenger
+            Messenger.IssueCancellation(CancellationTokenSource);
+
+            // dispose of the messenger
+            if (!IsDisposed)
+            {
+                // should close out database and issue cancellation to token
+                Messenger.Dispose();
+            }
+
+            Trace.WriteLine("Cleanup complete");
+
+            //shutdown right away so there are no lingering threads
+            Environment.Exit(-1);
+
+            return true;
+        }
+        #endregion
     }
 }

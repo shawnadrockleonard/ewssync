@@ -10,11 +10,17 @@ namespace EWS.Common.Models
 {
     public class SubscriptionCollection
     {
-        public PullSubscription Runningsubscription { get; set; }
+        public PullSubscription Pulling { get; set; }
+
+        public StreamingSubscription Streaming { get; set; }
 
         public EntitySubscription DatabaseSubscription { get; set; }
 
-
         public string SmtpAddress { get; set; }
+
+        /// <summary>
+        /// Type of subscription
+        /// </summary>
+        public SubscriptionTypeEnum SubscriptionType { get; set; }
     }
 }

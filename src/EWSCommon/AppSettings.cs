@@ -54,6 +54,8 @@ namespace EWS.Common
         public int BatchSize { get; set; }
 
         public string ImpersonationAcct { get; set; }
+
+        public bool PullEnabled { get; set; }
     }
 
     public class SettingsQueues

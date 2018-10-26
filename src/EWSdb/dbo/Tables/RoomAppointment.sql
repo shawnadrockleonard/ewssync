@@ -1,6 +1,6 @@
 ﻿CREATE TABLE [dbo].[RoomAppointment] (
     [Id]                   INT             IDENTITY (1, 1) NOT NULL,
-    [OrganizerSmtpAddress] NVARCHAR (MAX)  NULL,
+    [OrganizerSmtpAddress] NVARCHAR (255)  NULL,
     [RoomId]               INT             NOT NULL,
     [StartUTC]             DATETIME        NOT NULL,
     [EndUTC]               DATETIME        NOT NULL,

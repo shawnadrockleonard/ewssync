@@ -42,4 +42,11 @@
     <Property Name="ParentElementType" Value="SqlTable" />
     <Property Name="NewName" Value="BookingId" />
   </Operation>
+  <Operation Name="Rename Refactor" Key="29437e11-0b91-42de-a4cf-3cae751a958a" ChangeDateTime="10/26/2018 08:38:37">
+    <Property Name="ElementName" Value="[dbo].[RoomListRoomsSyncState].[SyncDate]" />
+    <Property Name="ElementType" Value="SqlSimpleColumn" />
+    <Property Name="ParentElementName" Value="[dbo].[RoomListRoomsSyncState]" />
+    <Property Name="ParentElementType" Value="SqlTable" />
+    <Property Name="NewName" Value="SyncTimestamp" />
+  </Operation>
 </Operations>

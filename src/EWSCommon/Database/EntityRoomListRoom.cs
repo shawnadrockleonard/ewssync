@@ -33,5 +33,10 @@ namespace EWS.Common.Database
         /// The collection of appointments associated with the room.
         /// </summary>
         public virtual ICollection<EntityRoomAppointment> Appointments { get; set; }
+
+        /// <summary>
+        /// The collection of sync activites for the Room
+        /// </summary>
+        public virtual ICollection<EntityRoomListRoomSyncState> SyncStates { get; set; }
     }
 }

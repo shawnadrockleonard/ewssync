@@ -37,10 +37,15 @@ namespace EWS.Common.Database
         {
             base.OnModelCreating(modelBuilder);
 
+            modelBuilder.Entity<EntitySubscription>().HasKey(hk => hk.Id);
+
             modelBuilder.Entity<EntityRoomListRoom>().HasKey(hk => hk.Id);
 
             modelBuilder.Entity<EntityRoomAppointment>().HasKey(hk => hk.Id);
             modelBuilder.Entity<EntityRoomAppointment>().HasRequired(hr => hr.Room).WithMany(wm => wm.Appointments).HasForeignKey(fk => fk.RoomId);
+
+            modelBuilder.Entity<EntityRoomListRoomSyncState>().HasKey(hk => hk.Id);
+            modelBuilder.Entity<EntityRoomListRoomSyncState>().HasRequired(hr => hr.Room).WithMany(wo => wo.SyncStates).HasForeignKey(fk => fk.RoomId);
         }
 
         public DbSet<EntityRoomListRoom> RoomListRoomEntities { get; set; }
@@ -50,5 +55,7 @@ namespace EWS.Common.Database
 
 
         public DbSet<EntitySubscription> SubscriptionEntities { get; set; }
+
+        public DbSet<EntityRoomListRoomSyncState> SyncStateEntities { get; set; }
     }
 }

@@ -9,41 +9,22 @@ using System.Threading.Tasks;
 namespace EWS.Common.Models
 {
     [DataContract(Name = "Booking", Namespace = "http://xyz.com/updatedbooking")]
-    public class BlockBooking
+    public class EventBooking
     {
         /// <summary>
-        /// this is the unique key stored in Database to identify booking in our system, you can ignore this for POC; >0 existing meeting
+        /// Gets the date and time when the event occurred.
         /// </summary>
         [DataMember]
-        public int? DatabaseId { get; set; }
+        public DateTime TimeStamp { get; set; }
 
         [DataMember]
-        public string MailBoxOwnerEmail { get; set; }
-
-        [DataMember]
-        public DateTime StartUTC { get; set; }
-
-        [DataMember]
-        public DateTime EndUTC { get; set; }
-
-        [DataMember]
-        public string Subject { get; set; }
-
-        [DataMember]
-        public string Location { get; set; }
-
+        public EventType EventType { get; set; }
 
         [DataMember]
         public string SiteMailBox { get; set; }
 
-        /// <summary>
-        /// recurrence pattern of recuuring appointments
-        /// </summary>
         [DataMember]
-        public string RecurrencePattern { get; set; } 
-
-
-        //public List<BookingException> Exceptions { get; set; } // exception for recurring appointments
+        public ConnectingIdType ConnectingType { get; set; }
 
         /// <summary>
         /// custom property saved in appointment, Same is  also saved in database which allows us to link appointment with our systen
@@ -56,5 +37,17 @@ namespace EWS.Common.Models
         /// </summary>
         [DataMember]
         public string ExchangeChangeKey { get; set; }
+
+        /// <summary>
+        /// custom property saved in appointment, Same is  also saved in database which allows us to link appointment with our systen
+        /// </summary>
+        [DataMember]
+        public string OldExchangeId { get; set; }
+
+        /// <summary>
+        /// Exchange ItemId change key
+        /// </summary>
+        [DataMember]
+        public string OldExchangeChangeKey { get; set; }
     }
 }

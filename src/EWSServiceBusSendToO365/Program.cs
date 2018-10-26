@@ -26,7 +26,6 @@ namespace EWSServiceBusSendToO365
     class Program
     {
         static private System.Threading.CancellationTokenSource CancellationTokenSource = new System.Threading.CancellationTokenSource();
-        static private bool exitSystem = false;
         static private bool IsDisposed { get; set; }
         static MessageManager Messenger { get; set; }
 
@@ -70,11 +69,10 @@ namespace EWSServiceBusSendToO365
 
 
             var queueConnection = EWSConstants.Config.ServiceBus.SendToO365;
-            var queueName = "too365"; // queue | partition
 
-            var sendTask = Messenger.SendQueueDatabaseChangesAsync(queueConnection, queueName);
+            var sendTask = Messenger.SendQueueDatabaseChangesAsync(queueConnection);
 
-            var receiveTask = Messenger.ReceiveQueueDatabaseChangesAsync(queueConnection, queueName);
+            var receiveTask = Messenger.ReceiveQueueDatabaseChangesAsync(queueConnection);
 
 
             await System.Threading.Tasks.Task.WhenAll(
@@ -120,9 +118,6 @@ namespace EWSServiceBusSendToO365
             }
 
             Trace.WriteLine("Cleanup complete");
-
-            //allow main to run off
-            exitSystem = true;
 
             //shutdown right away so there are no lingering threads
             Environment.Exit(-1);

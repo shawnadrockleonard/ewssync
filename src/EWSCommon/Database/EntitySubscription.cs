@@ -11,14 +11,26 @@ namespace EWS.Common.Database
     [Table("Subscriptions", Schema = "dbo")]
     public class EntitySubscription
     {
+        public EntitySubscription()
+        {
+            Terminated = false;
+        }
+
+        [Key()]
+        public int Id { get; set; }
+
         /// <summary>
         /// Subscription ID
         /// </summary>
-        [Key()]
-        public string Id { get; set; }
+        public string SubscriptionId { get; set; }
 
         [MaxLength(2048)]
         public string Watermark { get; set; }
+
+
+        [MaxLength(2048)]
+        public string PreviousWatermark { get; set; }
+
 
         [MaxLength(255)]
         public string SmtpAddress { get; set; }
