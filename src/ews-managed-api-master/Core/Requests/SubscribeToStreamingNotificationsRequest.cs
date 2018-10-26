@@ -52,7 +52,7 @@ namespace Microsoft.Exchange.WebServices.Data
 
             if (!String.IsNullOrEmpty(this.Watermark))
             {
-                //throw new ArgumentException("Watermarks cannot be used with StreamingSubscriptions.", "Watermark");
+                throw new ArgumentException("Watermarks cannot be used with StreamingSubscriptions.", "Watermark");
             }
         }
 

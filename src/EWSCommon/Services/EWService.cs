@@ -134,10 +134,8 @@ namespace EWS.Common.Services
         /// </summary>
         /// <param name="connectingIdType"></param>
         /// <param name="roomAddress"></param>
-        /// <param name="timeout">The timeout, in minutes, after which the subscription expires. Timeout must be between 1 and 1440.</param>
-        /// <param name="watermark">An optional watermark representing a previously opened subscription.</param>
         /// <returns></returns>
-        public StreamingSubscription CreateStreamingSubscription(ConnectingIdType connectingIdType, string roomAddress, int timeout = 30, string watermark = null)
+        public StreamingSubscription CreateStreamingSubscription(ConnectingIdType connectingIdType, string roomAddress)
         {
             ServicePointManager.DefaultConnectionLimit = ServicePointManager.DefaultPersistentConnectionLimit;
 
@@ -149,7 +147,6 @@ namespace EWS.Common.Services
                 // TODO: How to reconnect after app failure and get all events since failure occured
                 var sub = ExchangeService.SubscribeToStreamingNotifications(
                     new FolderId[] { WellKnownFolderName.Calendar },
-                    watermark,
                     EventType.Created, EventType.Deleted, EventType.Modified, EventType.Moved, EventType.Copied);
 
 

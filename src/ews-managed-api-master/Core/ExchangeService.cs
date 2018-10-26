@@ -2836,12 +2836,10 @@ namespace Microsoft.Exchange.WebServices.Data
         /// Subscribes to streaming notifications. Calling this method results in a call to EWS.
         /// </summary>
         /// <param name="folderIds">The Ids of the folder to subscribe to.</param>
-        /// <param name="watermark">An optional watermark representing a previously opened subscription.</param>
         /// <param name="eventTypes">The event types to subscribe to.</param>
         /// <returns>A StreamingSubscription representing the new subscription.</returns>
         public StreamingSubscription SubscribeToStreamingNotifications(
             IEnumerable<FolderId> folderIds,
-            string watermark,
             params EventType[] eventTypes)
         {
             EwsUtilities.ValidateMethodVersion(
@@ -2851,7 +2849,7 @@ namespace Microsoft.Exchange.WebServices.Data
 
             EwsUtilities.ValidateParamCollection(folderIds, "folderIds");
 
-            return this.BuildSubscribeToStreamingNotificationsRequest(folderIds, watermark, eventTypes).Execute()[0].Subscription;
+            return this.BuildSubscribeToStreamingNotificationsRequest(folderIds, eventTypes).Execute()[0].Subscription;
         }
 
         /// <summary>
@@ -2860,14 +2858,12 @@ namespace Microsoft.Exchange.WebServices.Data
         /// <param name="callback">The AsyncCallback delegate.</param>
         /// <param name="state">An object that contains state information for this request.</param>
         /// <param name="folderIds">The Ids of the folder to subscribe to.</param>
-        /// <param name="watermark">An optional watermark representing a previously opened subscription.</param>
         /// <param name="eventTypes">The event types to subscribe to.</param>
         /// <returns>An IAsyncResult that references the asynchronous request.</returns>
         public IAsyncResult BeginSubscribeToStreamingNotifications(
             AsyncCallback callback,
             object state,
             IEnumerable<FolderId> folderIds,
-            string watermark,
             params EventType[] eventTypes)
         {
             EwsUtilities.ValidateMethodVersion(
@@ -2877,17 +2873,15 @@ namespace Microsoft.Exchange.WebServices.Data
 
             EwsUtilities.ValidateParamCollection(folderIds, "folderIds");
 
-            return this.BuildSubscribeToStreamingNotificationsRequest(folderIds, watermark, eventTypes).BeginExecute(callback, state);
+            return this.BuildSubscribeToStreamingNotificationsRequest(folderIds, eventTypes).BeginExecute(callback, state);
         }
 
         /// <summary>
         /// Subscribes to streaming notifications on all folders in the authenticated user's mailbox. Calling this method results in a call to EWS.
         /// </summary>
-        /// <param name="watermark">An optional watermark representing a previously opened subscription.</param>
         /// <param name="eventTypes">The event types to subscribe to.</param>
         /// <returns>A StreamingSubscription representing the new subscription.</returns>
         public StreamingSubscription SubscribeToStreamingNotificationsOnAllFolders(
-            string watermark,
             params EventType[] eventTypes)
         {
             EwsUtilities.ValidateMethodVersion(
@@ -2895,7 +2889,7 @@ namespace Microsoft.Exchange.WebServices.Data
                 ExchangeVersion.Exchange2010_SP1,
                 "SubscribeToStreamingNotificationsOnAllFolders");
 
-            return this.BuildSubscribeToStreamingNotificationsRequest(null, watermark, eventTypes).Execute()[0].Subscription;
+            return this.BuildSubscribeToStreamingNotificationsRequest(null, eventTypes).Execute()[0].Subscription;
         }
 
         /// <summary>
@@ -2903,13 +2897,11 @@ namespace Microsoft.Exchange.WebServices.Data
         /// </summary>
         /// <param name="callback">The AsyncCallback delegate.</param>
         /// <param name="state">An object that contains state information for this request.</param>
-        /// <param name="watermark">An optional watermark representing a previously opened subscription.</param>
         /// <param name="eventTypes"></param>
         /// <returns>An IAsyncResult that references the asynchronous request.</returns>
         public IAsyncResult BeginSubscribeToStreamingNotificationsOnAllFolders(
             AsyncCallback callback,
             object state, 
-            string watermark,
             params EventType[] eventTypes)
         {
             EwsUtilities.ValidateMethodVersion(
@@ -2917,7 +2909,7 @@ namespace Microsoft.Exchange.WebServices.Data
                 ExchangeVersion.Exchange2010_SP1,
                 "BeginSubscribeToStreamingNotificationsOnAllFolders");
 
-            return this.BuildSubscribeToStreamingNotificationsRequest(null, watermark, eventTypes).BeginExecute(callback, state);
+            return this.BuildSubscribeToStreamingNotificationsRequest(null, eventTypes).BeginExecute(callback, state);
         }
 
         /// <summary>
@@ -2941,12 +2933,10 @@ namespace Microsoft.Exchange.WebServices.Data
         /// Builds request to subscribe to streaming notifications in the authenticated user's mailbox. 
         /// </summary>
         /// <param name="folderIds">The Ids of the folder to subscribe to.</param>
-        /// <param name="watermark">An optional watermark representing a previously opened subscription.</param>
         /// <param name="eventTypes">The event types to subscribe to.</param>
         /// <returns>A request to subscribe to streaming notifications in the authenticated user's mailbox. </returns>
         private SubscribeToStreamingNotificationsRequest BuildSubscribeToStreamingNotificationsRequest(
             IEnumerable<FolderId> folderIds,
-            string watermark,
             EventType[] eventTypes)
         {
             EwsUtilities.ValidateParamCollection(eventTypes, "eventTypes");
@@ -2959,7 +2949,6 @@ namespace Microsoft.Exchange.WebServices.Data
             }
 
             request.EventTypes.AddRange(eventTypes);
-            request.Watermark = watermark;
 
             return request;
         }

@@ -23,6 +23,8 @@ namespace EWSResourceSync
         private static List<StreamingSubscriptionConnection> _connections = new List<StreamingSubscriptionConnection>();
         private static List<SubscriptionCollection> subscriptions { get; set; }
 
+        private static StreamingSubscriptionConnection connection { get; set; }
+
 
         static void Main(string[] args)
         {
@@ -94,7 +96,7 @@ namespace EWSResourceSync
 
             // Create a streaming connection to the service object, over which events are returned to the client.
             // Keep the streaming connection open for 30 minutes.
-            var connection = new StreamingSubscriptionConnection(service.Current, subscriptions.Select(s => s.Streaming), 30);
+            connection = new StreamingSubscriptionConnection(service.Current, subscriptions.Select(s => s.Streaming), 30);
             var semaphore = new System.Threading.SemaphoreSlim(1);
 
             connection.OnNotificationEvent += (object sender, NotificationEventArgs args) =>
@@ -142,16 +144,29 @@ namespace EWSResourceSync
             };
             connection.OnDisconnect += (object sender, SubscriptionErrorEventArgs args) =>
             {
-                if (args.Exception == null)
-                    Trace.WriteLine($"ListenToRoomReservationChangesAsync.StreamingSubscriptionConnection disconnected");
-                else
-                    Trace.WriteLine($"ListenToRoomReservationChangesAsync.StreamingSubscriptionConnection disconnected with exception: {args.Exception.Message}");
+                Trace.WriteLine($"StreamingSubscriptionChangesAsync OnDisconnect with exception: {args.Exception}");
+
                 if (CancellationTokenSource.IsCancellationRequested)
+                {
+                    Trace.WriteLine($"StreamingSubscriptionChangesAsync disconnecting");
+                    if (connection.CurrentSubscriptions != null && subscriptions != null)
+                    {
+                        Trace.WriteLine($"OnDisconnect Closing streamingsubscriptionconnection at {DateTime.UtcNow}..");
+                        foreach (var item in subscriptions)
+                        {
+                            item.DatabaseSubscription.LastRunTime = DateTime.UtcNow;
+                            item.DatabaseSubscription.Terminated = true;
+
+                            Trace.WriteLine($"RemoveSubscription {item.Streaming.Id}");
+                            connection.RemoveSubscription(item.Streaming);
+                        };
+                    }
                     semaphore.Release();
+                }
                 else
                 {
+                    Trace.WriteLine($"StreamingSubscriptionChangesAsync re-connected");
                     connection.Open();
-                    Trace.WriteLine($"ListenToRoomReservationChangesAsync.StreamingSubscriptionConnection re-connected");
                 }
             };
             connection.OnSubscriptionError += (object sender, SubscriptionErrorEventArgs args) =>
@@ -159,23 +174,11 @@ namespace EWSResourceSync
                 if (args.Exception is ServiceResponseException)
                 {
                     var exception = args.Exception as ServiceResponseException;
+                    Trace.WriteLine($"OnSubscriptionError(ServiceResponseException) : {exception.Message} Stack Trace : {exception.StackTrace} Inner Exception : {exception.InnerException}");
                 }
                 else if (args.Exception != null)
                 {
-                    Trace.WriteLine($"OnSubscriptionError() : {args.Exception.Message} Stack Trace : {args.Exception.StackTrace} Inner Exception : {args.Exception.InnerException}");
-                }
-
-                connection = (StreamingSubscriptionConnection)sender;
-                if (args.Subscription != null)
-                {
-                    try
-                    {
-                        connection.RemoveSubscription(args.Subscription);
-                    }
-                    catch (Exception rex)
-                    {
-                        Trace.WriteLine($"RemoveSubscriptionException to provision subscription {rex.Message}");
-                    }
+                    Trace.WriteLine($"OnSubscriptionError(Exception) : {args.Exception.Message} Stack Trace : {args.Exception.StackTrace} Inner Exception : {args.Exception.InnerException}");
                 }
             };
             semaphore.Wait();
@@ -275,31 +278,19 @@ namespace EWSResourceSync
         {
             Trace.WriteLine("Exiting system due to external CTRL-C, or process kill, or shutdown");
 
-            // enumerate open subscriptions and close them
-            subscriptions.ForEach(subscription =>
-            {
-                if (subscription.SubscriptionType == EWS.Common.Database.SubscriptionTypeEnum.StreamingSubscription)
-                {
-                    var f = subscription.Streaming;
-                    Trace.WriteLine($"Now unsubscribing for {f.Id}");
-                    f.Unsubscribe();
-                }
-                else if (subscription.SubscriptionType == EWS.Common.Database.SubscriptionTypeEnum.PullSubscription)
-                {
-                    var f = subscription.Pulling;
-                    Trace.WriteLine($"Now unsubscribing for {f.Id}");
-                    f.Unsubscribe();
-                }
-
-                subscription.DatabaseSubscription.Terminated = true;
-                subscription.DatabaseSubscription.LastRunTime = DateTime.UtcNow;
-            });
 
             // should cancel all registered events
             CancellationTokenSource.Cancel();
 
             // issue into messenger
             Messenger.IssueCancellation(CancellationTokenSource);
+
+            // Close the connection stream
+            if (connection != null && connection.IsOpen)
+            {
+                Trace.WriteLine($"ConsoleCtrlCheck Closing streamingsubscriptionconnection at {DateTime.UtcNow}..");
+                connection.Close();
+            }
 
             // dispose of the messenger
             if (!IsDisposed)
@@ -308,7 +299,7 @@ namespace EWSResourceSync
                 Messenger.Dispose();
             }
 
-
+            // cleanup complete
             Trace.WriteLine("Cleanup complete");
 
             //shutdown right away so there are no lingering threads

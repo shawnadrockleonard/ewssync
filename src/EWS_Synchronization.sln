@@ -17,6 +17,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "serviceBus", "serviceBus", 
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "managed-api", "managed-api", "{2590A66F-2FE3-4615-9038-9E2F7F3F01D2}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "repository", "repository", "{983A5F89-C07E-4E3F-9B20-8B554EB9F7C0}"
+EndProject
+Project("{00D1A9C2-B5F0-4AF3-8072-F6C62B433612}") = "ewsdb", "EWSdb\ewsdb.sqlproj", "{732C03BF-7AF6-4977-81AC-281709BCBD79}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,6 +47,12 @@ Global
 		{8D1DA3A7-AF99-43FD-A24B-3C64522B4DE1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8D1DA3A7-AF99-43FD-A24B-3C64522B4DE1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8D1DA3A7-AF99-43FD-A24B-3C64522B4DE1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{732C03BF-7AF6-4977-81AC-281709BCBD79}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{732C03BF-7AF6-4977-81AC-281709BCBD79}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{732C03BF-7AF6-4977-81AC-281709BCBD79}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{732C03BF-7AF6-4977-81AC-281709BCBD79}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{732C03BF-7AF6-4977-81AC-281709BCBD79}.Release|Any CPU.Build.0 = Release|Any CPU
+		{732C03BF-7AF6-4977-81AC-281709BCBD79}.Release|Any CPU.Deploy.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -51,6 +61,7 @@ Global
 		{F059972F-0561-4203-ABB8-3ABB41CCBE22} = {2590A66F-2FE3-4615-9038-9E2F7F3F01D2}
 		{9DF6E7E3-53CB-440E-B8FC-9396B905A49C} = {C5538813-0F36-48AD-91B9-705653EBAB45}
 		{8D1DA3A7-AF99-43FD-A24B-3C64522B4DE1} = {C5538813-0F36-48AD-91B9-705653EBAB45}
+		{732C03BF-7AF6-4977-81AC-281709BCBD79} = {983A5F89-C07E-4E3F-9B20-8B554EB9F7C0}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {11D656BE-C937-464A-94AC-448FCCDA0773}

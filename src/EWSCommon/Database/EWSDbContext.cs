@@ -16,21 +16,9 @@ namespace EWS.Common.Database
         public EWSDbContext(string nameOrConnectionString) : base(nameOrConnectionString)
         {
             this.Configuration.ProxyCreationEnabled = false;
-            var debugswitch = false;
-#if DEBUG
-            if (nameOrConnectionString.IndexOf(@"(localdb)", StringComparison.CurrentCultureIgnoreCase) > -1)
-            {
-                debugswitch = true;
-                System.Data.Entity.Database.SetInitializer<EWSDbContext>(new EWSDbContextInitializer());
-                Database.Initialize(true);
-            }
-#endif
 
-            if (!debugswitch)
-            {
-                System.Data.Entity.Database.SetInitializer<EWSDbContext>(null);
-                Database.Initialize(true);
-            }
+            System.Data.Entity.Database.SetInitializer<EWSDbContext>(null);
+            Database.Initialize(false);
         }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)

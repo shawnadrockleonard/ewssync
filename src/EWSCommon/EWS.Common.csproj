@@ -121,7 +121,6 @@
     <Compile Include="Database\EntitySubscription.cs" />
     <Compile Include="Database\EWSDbConfig.cs" />
     <Compile Include="Database\EWSDbContext.cs" />
-    <Compile Include="Database\EWSDbContextInitializer.cs" />
     <Compile Include="Database\EWSDbLogInterceptor.cs" />
     <Compile Include="Database\ITraceLogger.cs" />
     <Compile Include="Database\SubscriptionTypeEnum.cs" />
