@@ -38,9 +38,9 @@ namespace EWSStreamingNotificationSample
 
     public partial class FormMain : Form
     {
-        ClassLogger _logger=null;
+        ClassLogger _logger = null;
         ClassTraceListener _traceListener = null;
-        Dictionary<string,StreamingSubscriptionConnection> _connections = null;
+        Dictionary<string, StreamingSubscriptionConnection> _connections = null;
         Dictionary<string, StreamingSubscription> _subscriptions = null;
         Dictionary<string, GroupInfo> _groups = null;
         Mailboxes _mailboxes = null;
@@ -74,7 +74,7 @@ namespace EWSStreamingNotificationSample
             //comboBoxExchangeVersion.Enabled = false;
         }
 
-        private void ReadMailboxes(string MailboxFile="")
+        private void ReadMailboxes(string MailboxFile = "")
         {
             string sMailboxFile = MailboxFile;
             if (String.IsNullOrEmpty(MailboxFile))
@@ -109,7 +109,7 @@ namespace EWSStreamingNotificationSample
                 if (listBoxEvents.InvokeRequired)
                 {
                     // Need to invoke
-                    listBoxEvents.Invoke(new MethodInvoker(delegate()
+                    listBoxEvents.Invoke(new MethodInvoker(delegate ()
                     {
                         listBoxEvents.Items.Add(a.LogDetails);
                         listBoxEvents.SelectedIndex = listBoxEvents.Items.Count - 1;
@@ -157,7 +157,7 @@ namespace EWSStreamingNotificationSample
                     info.Mailbox = sMailbox;
                     info.Event = e;
                     info.Service = Subscription.Service;
-                    
+
                     ThreadPool.QueueUserWorkItem(new WaitCallback(ShowMoreInfo), info);
                 }
                 else
@@ -180,6 +180,8 @@ namespace EWSStreamingNotificationSample
 
             ShowEvent(sEvent);
         }
+
+        #region Exchange Web Service Information
 
         void ShowMoreInfo(object e)
         {
@@ -269,7 +271,7 @@ namespace EWSStreamingNotificationSample
             {
                 sItemInfo += "Appointment subject=" + oItem.Subject;
                 // Show attendee information
-                Appointment oAppt=oItem as Appointment;
+                Appointment oAppt = oItem as Appointment;
                 sItemInfo += ",RequiredAttendees=" + GetAttendees(oAppt.RequiredAttendees);
                 sItemInfo += ",OptionalAttendees=" + GetAttendees(oAppt.OptionalAttendees);
             }
@@ -316,7 +318,7 @@ namespace EWSStreamingNotificationSample
                 if (listBoxEvents.InvokeRequired)
                 {
                     // Need to invoke
-                    listBoxEvents.Invoke(new MethodInvoker(delegate()
+                    listBoxEvents.Invoke(new MethodInvoker(delegate ()
                     {
                         listBoxEvents.Items.Add(eventDetails);
                         listBoxEvents.SelectedIndex = listBoxEvents.Items.Count - 1;
@@ -334,6 +336,8 @@ namespace EWSStreamingNotificationSample
             }
         }
 
+        #endregion
+
         private void buttonClose_Click(object sender, EventArgs e)
         {
             this.Dispose();
@@ -345,7 +349,7 @@ namespace EWSStreamingNotificationSample
             EventType[] events = null;
             if (comboBoxSubscribeTo.InvokeRequired)
             {
-                checkedListBoxEvents.Invoke(new MethodInvoker(delegate()
+                checkedListBoxEvents.Invoke(new MethodInvoker(delegate ()
                 {
                     if (checkedListBoxEvents.CheckedItems.Count > 0)
                     {
@@ -411,7 +415,7 @@ namespace EWSStreamingNotificationSample
             string sSubscribeFolder = "";
             if (comboBoxSubscribeTo.InvokeRequired)
             {
-                comboBoxSubscribeTo.Invoke(new MethodInvoker(delegate()
+                comboBoxSubscribeTo.Invoke(new MethodInvoker(delegate ()
                 {
                     sSubscribeFolder = comboBoxSubscribeTo.SelectedItem.ToString();
                 }));
@@ -647,7 +651,7 @@ namespace EWSStreamingNotificationSample
                 connection.Open();
             }
             timerMonitorConnections.Start();
-            
+
             return true;
         }
 
@@ -744,7 +748,7 @@ namespace EWSStreamingNotificationSample
         {
             bool bChecked = true;
             if (checkBoxSelectAll.CheckState == CheckState.Unchecked)
-                bChecked=false;
+                bChecked = false;
 
             for (int i = 0; i < checkedListBoxEvents.Items.Count; i++)
                 checkedListBoxEvents.SetItemChecked(i, bChecked);
@@ -783,7 +787,7 @@ namespace EWSStreamingNotificationSample
             if (_subscriptions == null)
                 return;
 
-            for (int i = _subscriptions.Keys.Count - 1; i>=0; i-- )
+            for (int i = _subscriptions.Keys.Count - 1; i >= 0; i--)
             {
                 string sMailbox = _subscriptions.Keys.ElementAt<string>(i);
                 StreamingSubscription subscription = _subscriptions[sMailbox];
@@ -870,7 +874,7 @@ namespace EWSStreamingNotificationSample
                 return;
 
             checkedListBoxMailboxes.Items.Clear();
-            string[] mbxList = mailboxes.Split(new string[]{Environment.NewLine},StringSplitOptions.RemoveEmptyEntries);
+            string[] mbxList = mailboxes.Split(new string[] { Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
             foreach (string mbx in mbxList)
                 checkedListBoxMailboxes.Items.Add(mbx);
         }

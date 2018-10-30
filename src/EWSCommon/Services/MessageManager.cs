@@ -623,18 +623,19 @@ namespace EWS.Common.Services
             await receiver.CloseAsync();
         }
 
-        public static void ProcessChanges(EWService _exchange, FolderId folderId, string _SynchronizationState = null)
+        public static void ProcessChanges(object folderInfo)
         {
             bool moreChangesAvailable;
+            EWSFolderInfo info = (EWSFolderInfo)folderInfo;
             do
             {
                 // Get all changes since the last call. The synchronization cookie is stored in the _SynchronizationState field.
                 // Just get the IDs of the items.
                 // For performance reasons, do not use the PropertySet.FirstClassProperties.
-                var changes = _exchange.Current.SyncFolderItems(folderId, PropertySet.IdOnly, null, 512, SyncFolderItemsScope.NormalItems, _SynchronizationState);
+                var changes = info.Service.Current.SyncFolderItems(info.Folder, PropertySet.IdOnly, null, 512, SyncFolderItemsScope.NormalItems, info.SynchronizationState);
 
                 // Update the synchronization 
-                _SynchronizationState = changes.SyncState;
+                info.SynchronizationState = changes.SyncState;
 
                 // Process all changes. If required, add a GetItem call here to request additional properties.
                 foreach (ItemChange itemChange in changes)
@@ -661,14 +662,24 @@ namespace EWS.Common.Services
             {
                 var mailboxId = room.SmtpAddress;
 
-                if (EwsDatabase.SubscriptionEntities.Any(rs => rs.SmtpAddress == room.SmtpAddress && !rs.Terminated))
+                EntitySubscription dbSubscription = null;
+                var subscriptionLastMark = default(DateTime?);
+                var synchronizationState = string.Empty;
+                if (EwsDatabase.SubscriptionEntities.Any(rs => rs.SmtpAddress == mailboxId && rs.SubscriptionType == SubscriptionTypeEnum.StreamingSubscription))
                 {
-                    EwsDatabase.SubscriptionEntities.Where(fd => fd.SmtpAddress == room.SmtpAddress && !fd.Terminated).ToList().ForEach(
-                        (dbSubscription) =>
-                        {
-                            // close out the old subscription
-                            dbSubscription.Terminated = true;
-                        });
+                    dbSubscription = EwsDatabase.SubscriptionEntities.FirstOrDefault(rs => rs.SmtpAddress == room.SmtpAddress && rs.SubscriptionType == SubscriptionTypeEnum.StreamingSubscription);
+                    subscriptionLastMark = dbSubscription.LastRunTime;
+                    synchronizationState = dbSubscription.SynchronizationState;
+                }
+                else
+                {   // newup a subscription to track the watermark
+                    dbSubscription = new EntitySubscription()
+                    {
+                        LastRunTime = DateTime.UtcNow,
+                        SubscriptionType = SubscriptionTypeEnum.StreamingSubscription,
+                        SmtpAddress = mailboxId
+                    };
+                    EwsDatabase.SubscriptionEntities.Add(dbSubscription);
                 }
 
                 try
@@ -676,7 +687,17 @@ namespace EWS.Common.Services
                     var roomService = new EWService(Ewstoken);
                     roomService.SetImpersonation(ConnectingIdType.SmtpAddress, mailboxId);
                     var folderId = new FolderId(WellKnownFolderName.Calendar, mailboxId);
-                    ProcessChanges(roomService, folderId);
+                    var info = new EWSFolderInfo()
+                    {
+                        SmtpAddress = mailboxId,
+                        SynchronizationState = synchronizationState,
+                        Service = roomService,
+                        Folder = folderId,
+                        LastRunTime = subscriptionLastMark
+                    };
+
+                    // Fireoff folder sync in background thread
+                    ThreadPool.QueueUserWorkItem(new WaitCallback(ProcessChanges), info);
                 }
                 catch (Exception srex)
                 {
@@ -689,22 +710,14 @@ namespace EWS.Common.Services
                     var roomService = new EWService(Ewstoken);
                     var subscription = roomService.CreateStreamingSubscription(ConnectingIdType.SmtpAddress, mailboxId);
 
-                    // newup a subscription to track the watermark
-                    var newSubscription = new EntitySubscription()
-                    {
-                        SubscriptionId = subscription.Id,
-                        LastRunTime = DateTime.UtcNow,
-                        SubscriptionType = SubscriptionTypeEnum.StreamingSubscription,
-                        SmtpAddress = mailboxId
-                    };
-                    EwsDatabase.SubscriptionEntities.Add(newSubscription);
+
 
                     Trace.WriteLine($"CreateStreamingSubscriptionGrouping to room {mailboxId}");
                     subscriptions.Add(new SubscriptionCollection()
                     {
                         Streaming = subscription,
                         SmtpAddress = mailboxId,
-                        DatabaseSubscription = newSubscription,
+                        DatabaseSubscription = dbSubscription,
                         SubscriptionType = SubscriptionTypeEnum.StreamingSubscription
                     });
 
@@ -740,39 +753,40 @@ namespace EWS.Common.Services
             {
                 EntitySubscription dbSubscription = null;
                 string watermark = null;
-                if (EwsDatabase.SubscriptionEntities.Any(rs => rs.SmtpAddress == room.SmtpAddress && !rs.Terminated))
+                if (EwsDatabase.SubscriptionEntities.Any(rs => rs.SmtpAddress == room.SmtpAddress && rs.SubscriptionType == SubscriptionTypeEnum.PullSubscription))
                 {
-                    dbSubscription = EwsDatabase.SubscriptionEntities.FirstOrDefault(fd => fd.SmtpAddress == room.SmtpAddress && !fd.Terminated);
+                    dbSubscription = EwsDatabase.SubscriptionEntities.FirstOrDefault(rs => rs.SmtpAddress == room.SmtpAddress && rs.SubscriptionType == SubscriptionTypeEnum.PullSubscription);
                     watermark = dbSubscription.Watermark;
+                }
+                else
+                {
+                    // newup a subscription to track the watermark
+                    dbSubscription = new EntitySubscription()
+                    {
+                        LastRunTime = DateTime.UtcNow,
+                        SubscriptionType = SubscriptionTypeEnum.PullSubscription,
+                        SmtpAddress = room.SmtpAddress
+                    };
+                    EwsDatabase.SubscriptionEntities.Add(dbSubscription);
                 }
 
                 try
                 {
                     var roomService = new EWService(Ewstoken);
                     var subscription = roomService.CreatePullSubscription(ConnectingIdType.SmtpAddress, room.SmtpAddress, timeout, watermark);
-                    if (!string.IsNullOrEmpty(watermark))
-                    {
-                        // close out the old subscription
-                        dbSubscription.Terminated = true;
-                    }
 
-                    // newup a subscription to track the watermark
-                    var newSubscription = new EntitySubscription()
-                    {
-                        SubscriptionId = subscription.Id,
-                        Watermark = subscription.Watermark,
-                        LastRunTime = DateTime.UtcNow,
-                        SubscriptionType = SubscriptionTypeEnum.PullSubscription,
-                        SmtpAddress = room.SmtpAddress
-                    };
-                    EwsDatabase.SubscriptionEntities.Add(newSubscription);
+                    // close out the old subscription
+                    dbSubscription.PreviousWatermark = (!string.IsNullOrEmpty(watermark)) ? watermark : null;
+                    dbSubscription.SubscriptionId = subscription.Id;
+                    dbSubscription.Watermark = subscription.Watermark;
+
 
                     Trace.WriteLine($"ListenToRoomReservationChangesAsync.Subscribed to room {room.SmtpAddress}");
                     subscriptions.Add(new SubscriptionCollection()
                     {
                         Pulling = subscription,
                         SmtpAddress = room.SmtpAddress,
-                        DatabaseSubscription = newSubscription,
+                        DatabaseSubscription = dbSubscription,
                         SubscriptionType = SubscriptionTypeEnum.PullSubscription
                     });
 

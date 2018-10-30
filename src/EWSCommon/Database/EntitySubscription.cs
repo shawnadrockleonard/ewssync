@@ -19,6 +19,15 @@ namespace EWS.Common.Database
         [Key()]
         public int Id { get; set; }
 
+
+        [MaxLength(255)]
+        public string SmtpAddress { get; set; }
+
+        /// <summary>
+        /// Type of subscription
+        /// </summary>
+        public SubscriptionTypeEnum SubscriptionType { get; set; }
+
         /// <summary>
         /// Subscription ID
         /// </summary>
@@ -32,20 +41,16 @@ namespace EWS.Common.Database
         public string PreviousWatermark { get; set; }
 
 
-        [MaxLength(255)]
-        public string SmtpAddress { get; set; }
-
-
         public DateTime LastRunTime { get; set; }
-
-        /// <summary>
-        /// Type of subscription
-        /// </summary>
-        public SubscriptionTypeEnum SubscriptionType { get; set; }
 
         /// <summary>
         /// Is the subscription closed by thread or cancelled
         /// </summary>
         public bool Terminated { get; set; }
+
+        /// <summary>
+        /// Provides a Folder sync state cookie
+        /// </summary>
+        public string SynchronizationState { get; set; }
     }
 }
