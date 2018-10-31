@@ -138,6 +138,7 @@
     <Compile Include="Services\GroupInfo.cs" />
     <Compile Include="Services\GroupInfoSubscriptionConnection.cs" />
     <Compile Include="Services\ItemEventComparer.cs" />
+    <Compile Include="Services\Mailboxes.cs" />
     <Compile Include="Services\MailboxInfo.cs" />
     <Compile Include="Services\MessageManager.cs" />
   </ItemGroup>

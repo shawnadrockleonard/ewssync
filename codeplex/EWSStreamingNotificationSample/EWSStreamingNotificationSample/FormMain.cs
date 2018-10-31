@@ -464,6 +464,8 @@ namespace EWSStreamingNotificationSample
             return folders;
         }
 
+        #region StreamingSubscriptionConnection Properties
+
         private void SubscribeConnectionEvents(StreamingSubscriptionConnection connection)
         {
             // Subscribe to events for this connection
@@ -505,6 +507,8 @@ namespace EWSStreamingNotificationSample
                 ProcessNotification(e, args.Subscription);
             }
         }
+
+        #endregion
 
         private StreamingSubscription AddSubscription(string Mailbox, GroupInfo Group)
         {
