@@ -117,7 +117,6 @@
     <Compile Include="Database\DefaultUsageLogger.cs" />
     <Compile Include="Database\EntityRoomAppointment.cs" />
     <Compile Include="Database\EntityRoomListRoom.cs" />
-    <Compile Include="Database\EntityRoomListRoomSyncState.cs" />
     <Compile Include="Database\EntitySubscription.cs" />
     <Compile Include="Database\EWSDbConfig.cs" />
     <Compile Include="Database\EWSDbContext.cs" />
@@ -136,7 +135,7 @@
     <Compile Include="Services\EWService.cs" />
     <Compile Include="Services\EWSFolderInfo.cs" />
     <Compile Include="Services\GroupInfo.cs" />
-    <Compile Include="Services\GroupInfoSubscriptionConnection.cs" />
+    <Compile Include="Services\GroupInfoSubscriptionManager.cs" />
     <Compile Include="Services\ItemEventComparer.cs" />
     <Compile Include="Services\Mailboxes.cs" />
     <Compile Include="Services\MailboxInfo.cs" />

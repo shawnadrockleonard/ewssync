@@ -5,6 +5,8 @@
     [SmtpAddress]  NVARCHAR (155) NULL,
     [LastSyncDate] DATETIME       NULL,
     [KnownEvents]  INT            NULL,
+    [SyncState] NVARCHAR(512) NULL, 
+    [SyncTimestamp] DATETIME NULL, 
     CONSTRAINT [PK_dbo.RoomListRooms] PRIMARY KEY CLUSTERED ([Id] ASC)
 );
 

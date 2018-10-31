@@ -67,7 +67,11 @@ namespace EWS.Common.Services
             _cancel = cancellationTokenSource;
         }
 
-
+        /// <summary>
+        /// Poll localDB events and push service bus events to the Queue
+        /// </summary>
+        /// <param name="queueConnection"></param>
+        /// <returns></returns>
         public async System.Threading.Tasks.Task SendQueueDatabaseChangesAsync(string queueConnection)
         {
             var sender = new MessageSender(queueConnection, SBQueueSyncDb);
@@ -109,64 +113,65 @@ namespace EWS.Common.Services
             while (!_cancel.IsCancellationRequested)
             {
                 var milliseconds = (int)waitTimer.TotalMilliseconds;
-                await SendRoomReservationChanges_Tick(sender);
+
+                // whatever you want to happen every 5 minutes
+                Trace.WriteLine($"PullRoomReservationChangesAsync({MailboxOwner}) starting at {DateTime.UtcNow.ToShortTimeString()}");
+
+
+                var i = 0;
+                var bookings = EwsDatabase.AppointmentEntities.Where(w => !w.ExistsInExchange || !w.SyncedWithExchange || (w.DeletedLocally && !w.SyncedWithExchange));
+                foreach (var booking in bookings)
+                {
+                    Microsoft.Exchange.WebServices.Data.EventType eventType = Microsoft.Exchange.WebServices.Data.EventType.Deleted;
+                    if (!booking.ExistsInExchange)
+                    {
+                        eventType = Microsoft.Exchange.WebServices.Data.EventType.Created;
+                    }
+                    else if (!booking.SyncedWithExchange)
+                    {
+                        eventType = Microsoft.Exchange.WebServices.Data.EventType.Modified;
+                    }
+
+                    var ewsbooking = new EWS.Common.Models.UpdatedBooking()
+                    {
+                        DatabaseId = booking.Id,
+                        MailBoxOwnerEmail = booking.OrganizerSmtpAddress,
+                        SiteMailBox = booking.Room.SmtpAddress,
+                        Subject = booking.Subject,
+                        Location = booking.Location,
+                        StartUTC = booking.StartUTC,
+                        EndUTC = booking.EndUTC,
+                        ExchangeId = booking.BookingId,
+                        ExchangeChangeKey = booking.BookingChangeKey,
+                        BookingReference = booking.BookingReference,
+                        ExchangeEvent = eventType
+                    };
+
+                    var message = new Message(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(ewsbooking)))
+                    {
+                        ContentType = "application/json",
+                        Label = SBMessageSyncDb,
+                        MessageId = i.ToString(),
+                        TimeToLive = TimeSpan.FromMinutes(2)
+                    };
+
+                    await sender.SendAsync(message);
+                    Trace.WriteLine($"{++i}. Sent: Id = {message.MessageId} w/ Subject:{booking.Subject}");
+                }
+
+                Trace.WriteLine($"Sent {i} messages");
+
                 Trace.WriteLine($"Sleeping at {DateTime.UtcNow} for {milliseconds} milliseconds...");
                 System.Threading.Thread.Sleep(milliseconds);
             }
 
         }
 
-        internal async System.Threading.Tasks.Task SendRoomReservationChanges_Tick(MessageSender sender)
-        {
-            // whatever you want to happen every 5 minutes
-            Trace.WriteLine($"PullRoomReservationChangesAsync({MailboxOwner}) starting at {DateTime.UtcNow.ToShortTimeString()}");
-
-
-            var i = 0;
-            var bookings = EwsDatabase.AppointmentEntities.Where(w => !w.ExistsInExchange || !w.SyncedWithExchange || (w.DeletedLocally && !w.SyncedWithExchange));
-            foreach (var booking in bookings)
-            {
-                Microsoft.Exchange.WebServices.Data.EventType eventType = Microsoft.Exchange.WebServices.Data.EventType.Deleted;
-                if (!booking.ExistsInExchange)
-                {
-                    eventType = Microsoft.Exchange.WebServices.Data.EventType.Created;
-                }
-                else if (!booking.SyncedWithExchange)
-                {
-                    eventType = Microsoft.Exchange.WebServices.Data.EventType.Modified;
-                }
-
-                var ewsbooking = new EWS.Common.Models.UpdatedBooking()
-                {
-                    DatabaseId = booking.Id,
-                    MailBoxOwnerEmail = booking.OrganizerSmtpAddress,
-                    SiteMailBox = booking.Room.SmtpAddress,
-                    Subject = booking.Subject,
-                    Location = booking.Location,
-                    StartUTC = booking.StartUTC,
-                    EndUTC = booking.EndUTC,
-                    ExchangeId = booking.BookingId,
-                    ExchangeChangeKey = booking.BookingChangeKey,
-                    BookingReference = booking.BookingReference,
-                    ExchangeEvent = eventType
-                };
-
-                var message = new Message(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(ewsbooking)))
-                {
-                    ContentType = "application/json",
-                    Label = SBMessageSyncDb,
-                    MessageId = i.ToString(),
-                    TimeToLive = TimeSpan.FromMinutes(2)
-                };
-
-                await sender.SendAsync(message);
-                Trace.WriteLine($"{++i}. Sent: Id = {message.MessageId} w/ Subject:{booking.Subject}");
-            }
-
-            Trace.WriteLine($"Sent {i} messages");
-        }
-
-
+        /// <summary>
+        /// Read Queue for Database Changes [preferably on a separate thread] and Store in Office 365
+        /// </summary>
+        /// <param name="queueConnection"></param>
+        /// <returns></returns>
         public async System.Threading.Tasks.Task ReceiveQueueDatabaseChangesAsync(string queueConnection)
         {
             var EwsService = new EWService(Ewstoken);
@@ -325,8 +330,13 @@ namespace EWS.Common.Services
             await receiver.CloseAsync();
         }
 
-
-
+        /// <summary>
+        /// Wait for Room Events and send it to the O365 Subscription Service Bus Queue
+        /// </summary>
+        /// <param name="queueConnection"></param>
+        /// <param name="roomSmtp"></param>
+        /// <param name="roomEvent"></param>
+        /// <returns></returns>
         public async System.Threading.Tasks.Task SendQueueO365ChangesAsync(string queueConnection, string roomSmtp, ItemEvent roomEvent)
         {
             var sender = new MessageSender(queueConnection, SBQueueSubscriptionO365);
@@ -361,7 +371,11 @@ namespace EWS.Common.Services
             Trace.WriteLine($"SendQueueO365ChangesAsync({roomSmtp}, {roomEvent.EventType.ToString("f")}) status => sent: Id = {message.MessageId}");
         }
 
-
+        /// <summary>
+        /// Read Queue for O365 Subscription changes and write it to the Database [preferably on a separate thread]
+        /// </summary>
+        /// <param name="queueConnection"></param>
+        /// <returns></returns>
         public async System.Threading.Tasks.Task ReceiveQueueO365ChangesAsync(string queueConnection)
         {
             Trace.WriteLine($"GetToO365() starting");
@@ -520,7 +534,13 @@ namespace EWS.Common.Services
             await receiver.CloseAsync();
         }
 
-
+        /// <summary>
+        /// Wait for Room Events from SyncFolders process and send it to the O365 Sync Service Bus Queue
+        /// </summary>
+        /// <param name="queueConnection"></param>
+        /// <param name="roomSmtp"></param>
+        /// <param name="roomEvent"></param>
+        /// <returns></returns>
         public async System.Threading.Tasks.Task SendQueueO365SyncFoldersAsync(string queueConnection, string roomSmtp, ItemEvent roomEvent)
         {
             var sender = new MessageSender(queueConnection, SBQueueSyncO365);
@@ -555,6 +575,11 @@ namespace EWS.Common.Services
             Trace.WriteLine($"SendQueueO365SyncFoldersAsync({roomSmtp}, {roomEvent.EventType.ToString("f")}) status => sent: Id = {message.MessageId}");
         }
 
+        /// <summary>
+        /// Read Queue for O365 Sync Folder events and write it to the database [preferably on a separate thread]
+        /// </summary>
+        /// <param name="queueConnection"></param>
+        /// <returns></returns>
         public async System.Threading.Tasks.Task ReceiveQueueO365SyncFoldersAsync(string queueConnection)
         {
             Trace.WriteLine($"ReceiveQueueO365SyncFoldersAsync() starting");
@@ -623,190 +648,10 @@ namespace EWS.Common.Services
             await receiver.CloseAsync();
         }
 
-        public static void ProcessChanges(object folderInfo)
-        {
-            bool moreChangesAvailable;
-            EWSFolderInfo info = (EWSFolderInfo)folderInfo;
-            do
-            {
-                // Get all changes since the last call. The synchronization cookie is stored in the _SynchronizationState field.
-                // Just get the IDs of the items.
-                // For performance reasons, do not use the PropertySet.FirstClassProperties.
-                var changes = info.Service.Current.SyncFolderItems(info.Folder, PropertySet.IdOnly, null, 512, SyncFolderItemsScope.NormalItems, info.SynchronizationState);
-
-                // Update the synchronization 
-                info.SynchronizationState = changes.SyncState;
-
-                // Process all changes. If required, add a GetItem call here to request additional properties.
-                foreach (ItemChange itemChange in changes)
-                {
-                    // This example just prints the ChangeType and ItemId to the console.
-                    // A LOB application would apply business rules to each 
-                    Trace.WriteLine($"ChangeType = {itemChange.ChangeType} with ItemId {itemChange.ItemId.ToString()}");
-                }
-
-                // If more changes are available, issue additional SyncFolderItems requests.
-                moreChangesAvailable = changes.MoreChangesAvailable;
-            }
-            while (moreChangesAvailable);
-        }
-
-        public List<SubscriptionCollection> CreateStreamingSubscriptionGrouping()
-        {
-            var subscriptions = new List<SubscriptionCollection>();
-            var EwsService = new EWService(Ewstoken);
-
-            EwsService.SetImpersonation(ConnectingIdType.SmtpAddress, MailboxOwner);
-
-            foreach (var room in EwsDatabase.RoomListRoomEntities.Where(w => !string.IsNullOrEmpty(w.Identity)))
-            {
-                var mailboxId = room.SmtpAddress;
-
-                EntitySubscription dbSubscription = null;
-                var subscriptionLastMark = default(DateTime?);
-                var synchronizationState = string.Empty;
-                if (EwsDatabase.SubscriptionEntities.Any(rs => rs.SmtpAddress == mailboxId && rs.SubscriptionType == SubscriptionTypeEnum.StreamingSubscription))
-                {
-                    dbSubscription = EwsDatabase.SubscriptionEntities.FirstOrDefault(rs => rs.SmtpAddress == room.SmtpAddress && rs.SubscriptionType == SubscriptionTypeEnum.StreamingSubscription);
-                    subscriptionLastMark = dbSubscription.LastRunTime;
-                    synchronizationState = dbSubscription.SynchronizationState;
-                }
-                else
-                {   // newup a subscription to track the watermark
-                    dbSubscription = new EntitySubscription()
-                    {
-                        LastRunTime = DateTime.UtcNow,
-                        SubscriptionType = SubscriptionTypeEnum.StreamingSubscription,
-                        SmtpAddress = mailboxId
-                    };
-                    EwsDatabase.SubscriptionEntities.Add(dbSubscription);
-                }
-
-                try
-                {
-                    var roomService = new EWService(Ewstoken);
-                    roomService.SetImpersonation(ConnectingIdType.SmtpAddress, mailboxId);
-                    var folderId = new FolderId(WellKnownFolderName.Calendar, mailboxId);
-                    var info = new EWSFolderInfo()
-                    {
-                        SmtpAddress = mailboxId,
-                        SynchronizationState = synchronizationState,
-                        Service = roomService,
-                        Folder = folderId,
-                        LastRunTime = subscriptionLastMark
-                    };
-
-                    // Fireoff folder sync in background thread
-                    ThreadPool.QueueUserWorkItem(new WaitCallback(ProcessChanges), info);
-                }
-                catch (Exception srex)
-                {
-                    Trace.WriteLine($"Failed to ProcessChanges{srex.Message}");
-                    throw new Exception($"ProcessChanges for {mailboxId} with MSG:{srex.Message}");
-                }
-
-                try
-                {
-                    var roomService = new EWService(Ewstoken);
-                    var subscription = roomService.CreateStreamingSubscription(ConnectingIdType.SmtpAddress, mailboxId);
-
-
-
-                    Trace.WriteLine($"CreateStreamingSubscriptionGrouping to room {mailboxId}");
-                    subscriptions.Add(new SubscriptionCollection()
-                    {
-                        Streaming = subscription,
-                        SmtpAddress = mailboxId,
-                        DatabaseSubscription = dbSubscription,
-                        SubscriptionType = SubscriptionTypeEnum.StreamingSubscription
-                    });
-
-                }
-                catch (Microsoft.Exchange.WebServices.Data.ServiceRequestException srex)
-                {
-                    Trace.WriteLine($"Failed to provision subscription {srex.Message}");
-                    throw new Exception($"Subscription could not be created for {mailboxId} with MSG:{srex.Message}");
-                }
-            }
-
-            try
-            {
-                var rowChanged = EwsDatabase.SaveChanges();
-                Trace.WriteLine($"Streaming subscription persisted {rowChanged} rows");
-            }
-            catch (System.Data.Entity.Core.EntityException dex)
-            {
-                Trace.WriteLine($"Failed to EF persist {dex.Message}");
-            }
-
-            return subscriptions;
-        }
-
-        public List<SubscriptionCollection> CreatePullSubscription(int timeout = 30)
-        {
-            var subscriptions = new List<SubscriptionCollection>();
-            var EwsService = new EWService(Ewstoken);
-
-            EwsService.SetImpersonation(ConnectingIdType.SmtpAddress, MailboxOwner);
-
-            foreach (var room in EwsDatabase.RoomListRoomEntities.Where(w => !string.IsNullOrEmpty(w.Identity)))
-            {
-                EntitySubscription dbSubscription = null;
-                string watermark = null;
-                if (EwsDatabase.SubscriptionEntities.Any(rs => rs.SmtpAddress == room.SmtpAddress && rs.SubscriptionType == SubscriptionTypeEnum.PullSubscription))
-                {
-                    dbSubscription = EwsDatabase.SubscriptionEntities.FirstOrDefault(rs => rs.SmtpAddress == room.SmtpAddress && rs.SubscriptionType == SubscriptionTypeEnum.PullSubscription);
-                    watermark = dbSubscription.Watermark;
-                }
-                else
-                {
-                    // newup a subscription to track the watermark
-                    dbSubscription = new EntitySubscription()
-                    {
-                        LastRunTime = DateTime.UtcNow,
-                        SubscriptionType = SubscriptionTypeEnum.PullSubscription,
-                        SmtpAddress = room.SmtpAddress
-                    };
-                    EwsDatabase.SubscriptionEntities.Add(dbSubscription);
-                }
-
-                try
-                {
-                    var roomService = new EWService(Ewstoken);
-                    var subscription = roomService.CreatePullSubscription(ConnectingIdType.SmtpAddress, room.SmtpAddress, timeout, watermark);
-
-                    // close out the old subscription
-                    dbSubscription.PreviousWatermark = (!string.IsNullOrEmpty(watermark)) ? watermark : null;
-                    dbSubscription.SubscriptionId = subscription.Id;
-                    dbSubscription.Watermark = subscription.Watermark;
-
-
-                    Trace.WriteLine($"ListenToRoomReservationChangesAsync.Subscribed to room {room.SmtpAddress}");
-                    subscriptions.Add(new SubscriptionCollection()
-                    {
-                        Pulling = subscription,
-                        SmtpAddress = room.SmtpAddress,
-                        DatabaseSubscription = dbSubscription,
-                        SubscriptionType = SubscriptionTypeEnum.PullSubscription
-                    });
-
-                    var rowChanged = SaveDbChanges();
-                    Trace.WriteLine($"Pull subscription persisted {rowChanged} rows");
-
-                }
-                catch (Microsoft.Exchange.WebServices.Data.ServiceRequestException srex)
-                {
-                    Trace.WriteLine($"Failed to provision subscription {srex.Message}");
-                    throw new Exception($"Subscription could not be created for {room.SmtpAddress} with MSG:{srex.Message}");
-                }
-            }
-
-            return subscriptions;
-        }
 
         #region Helper Exchange Methods
 
-        void ShowMoreInfo(object e)
+        public string RetreiveInfo(object e)
         {
             // Get more info for the given item.  This will run on it's own thread
             // so that the main program can continue as usual (we won't hold anything up)
@@ -830,19 +675,20 @@ namespace EWS.Common.Services
             else
                 sEvent = n.Mailbox + ": Folder " + (n.Event as FolderEvent).EventType.ToString() + ": " + MoreFolderInfo(n.Event as FolderEvent, ewsMoreInfoService);
 
-            ShowEvent(sEvent);
+            return ShowEvent(sEvent);
         }
 
-        private void ShowEvent(string eventDetails)
+        private string ShowEvent(string eventDetails)
         {
             try
             {
-
             }
             catch (Exception ex)
             {
                 Trace.WriteLine($"Ex {ex.Message} Error");
             }
+
+            return eventDetails;
         }
 
         private string MoreItemInfo(ItemEvent e, ExchangeService service)
@@ -948,14 +794,6 @@ namespace EWS.Common.Services
 
         #region Database Methods
 
-        /// <summary>
-        /// Save database changes
-        /// </summary>
-        /// <returns></returns>
-        public int SaveDbChanges()
-        {
-            return EwsDatabase.SaveChanges();
-        }
 
         /// <summary>
         /// Save database changes asynchronously

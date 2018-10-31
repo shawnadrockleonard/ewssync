@@ -1,4 +1,5 @@
 ﻿using EWS.Common;
+using EWS.Common.Database;
 using EWS.Common.Models;
 using EWS.Common.Services;
 using Microsoft.Exchange.WebServices.Data;
@@ -19,6 +20,7 @@ namespace EWSResourceSync
         static private bool IsDisposed { get; set; }
         static MessageManager Messenger { get; set; }
         static AuthenticationResult EwsToken { get; set; }
+        private static int pollingTimeout = 30;
 
         private static List<StreamingSubscriptionConnection> _connections = new List<StreamingSubscriptionConnection>();
         private static List<SubscriptionCollection> subscriptions { get; set; }
@@ -83,6 +85,100 @@ namespace EWSResourceSync
                 Console.WriteLine(ex.Message);
             }
         }
+
+
+
+        public List<SubscriptionCollection> CreateStreamingSubscriptionGrouping()
+        {
+            var subscriptions = new List<SubscriptionCollection>();
+            var EwsService = new EWService(Ewstoken);
+
+            EwsService.SetImpersonation(ConnectingIdType.SmtpAddress, MailboxOwner);
+
+            foreach (var room in EwsDatabase.RoomListRoomEntities.Where(w => !string.IsNullOrEmpty(w.Identity)))
+            {
+                var mailboxId = room.SmtpAddress;
+
+                EntitySubscription dbSubscription = null;
+                var subscriptionLastMark = default(DateTime?);
+                var synchronizationState = string.Empty;
+                if (EwsDatabase.SubscriptionEntities.Any(rs => rs.SmtpAddress == mailboxId && rs.SubscriptionType == SubscriptionTypeEnum.StreamingSubscription))
+                {
+                    dbSubscription = EwsDatabase.SubscriptionEntities.FirstOrDefault(rs => rs.SmtpAddress == room.SmtpAddress && rs.SubscriptionType == SubscriptionTypeEnum.StreamingSubscription);
+                    subscriptionLastMark = dbSubscription.LastRunTime;
+                    synchronizationState = dbSubscription.SynchronizationState;
+                }
+                else
+                {   // newup a subscription to track the watermark
+                    dbSubscription = new EntitySubscription()
+                    {
+                        LastRunTime = DateTime.UtcNow,
+                        SubscriptionType = SubscriptionTypeEnum.StreamingSubscription,
+                        SmtpAddress = mailboxId
+                    };
+                    EwsDatabase.SubscriptionEntities.Add(dbSubscription);
+                }
+
+                try
+                {
+                    var roomService = new EWService(Ewstoken);
+                    roomService.SetImpersonation(ConnectingIdType.SmtpAddress, mailboxId);
+                    var folderId = new FolderId(WellKnownFolderName.Calendar, mailboxId);
+                    var info = new EWSFolderInfo()
+                    {
+                        SmtpAddress = mailboxId,
+                        SynchronizationState = synchronizationState,
+                        Service = roomService,
+                        Folder = folderId,
+                        LastRunTime = subscriptionLastMark
+                    };
+
+                    // Fireoff folder sync in background thread
+                    ThreadPool.QueueUserWorkItem(new WaitCallback(ProcessChanges), info);
+                }
+                catch (Exception srex)
+                {
+                    Trace.WriteLine($"Failed to ProcessChanges{srex.Message}");
+                    throw new Exception($"ProcessChanges for {mailboxId} with MSG:{srex.Message}");
+                }
+
+                try
+                {
+                    var roomService = new EWService(Ewstoken);
+                    var subscription = roomService.CreateStreamingSubscription(ConnectingIdType.SmtpAddress, mailboxId);
+
+
+
+                    Trace.WriteLine($"CreateStreamingSubscriptionGrouping to room {mailboxId}");
+                    subscriptions.Add(new SubscriptionCollection()
+                    {
+                        Streaming = subscription,
+                        SmtpAddress = mailboxId,
+                        DatabaseSubscription = dbSubscription,
+                        SubscriptionType = SubscriptionTypeEnum.StreamingSubscription
+                    });
+
+                }
+                catch (Microsoft.Exchange.WebServices.Data.ServiceRequestException srex)
+                {
+                    Trace.WriteLine($"Failed to provision subscription {srex.Message}");
+                    throw new Exception($"Subscription could not be created for {mailboxId} with MSG:{srex.Message}");
+                }
+            }
+
+            try
+            {
+                var rowChanged = EwsDatabase.SaveChanges();
+                Trace.WriteLine($"Streaming subscription persisted {rowChanged} rows");
+            }
+            catch (System.Data.Entity.Core.EntityException dex)
+            {
+                Trace.WriteLine($"Failed to EF persist {dex.Message}");
+            }
+
+            return subscriptions;
+        }
+
 
 
         private async System.Threading.Tasks.Task StreamingSubscriptionChangesAsync(string queueConnection, string mailboxOwner)
@@ -171,16 +267,12 @@ namespace EWSResourceSync
             };
             connection.OnSubscriptionError += (object sender, SubscriptionErrorEventArgs args) =>
             {
-                if (args.Exception is ServiceResponseException)
-                {
-                    var exception = args.Exception as ServiceResponseException;
-                    Trace.WriteLine($"OnSubscriptionError(ServiceResponseException) : {exception.Message} Stack Trace : {exception.StackTrace} Inner Exception : {exception.InnerException}");
-                }
-                else if (args.Exception != null)
+                if (args.Exception != null)
                 {
                     Trace.WriteLine($"OnSubscriptionError(Exception) : {args.Exception.Message} Stack Trace : {args.Exception.StackTrace} Inner Exception : {args.Exception.InnerException}");
                 }
             };
+
             semaphore.Wait();
             connection.Open();
             await semaphore.WaitAsync(CancellationTokenSource.Token);
@@ -195,7 +287,70 @@ namespace EWSResourceSync
             var service = new EWService(EwsToken);
             service.SetImpersonation(ConnectingIdType.SmtpAddress, mailboxOwner);
 
-            subscriptions = Messenger.CreatePullSubscription();
+
+            subscriptions = new List<SubscriptionCollection>();
+            var EwsService = new EWService(EwsToken);
+            EwsService.SetImpersonation(ConnectingIdType.SmtpAddress, mailboxOwner);
+
+            // Retreive and Store PullSubscription Details
+            using (var _context = new EWSDbContext(EWSConstants.Config.Database))
+            {
+
+                foreach (var room in _context.RoomListRoomEntities.Where(w => !string.IsNullOrEmpty(w.Identity)))
+                {
+                    EntitySubscription dbSubscription = null;
+                    string watermark = null;
+                    if (_context.SubscriptionEntities.Any(rs => rs.SmtpAddress == room.SmtpAddress && rs.SubscriptionType == SubscriptionTypeEnum.PullSubscription))
+                    {
+                        dbSubscription = _context.SubscriptionEntities.FirstOrDefault(rs => rs.SmtpAddress == room.SmtpAddress && rs.SubscriptionType == SubscriptionTypeEnum.PullSubscription);
+                        watermark = dbSubscription.Watermark;
+                    }
+                    else
+                    {
+                        // newup a subscription to track the watermark
+                        dbSubscription = new EntitySubscription()
+                        {
+                            LastRunTime = DateTime.UtcNow,
+                            SubscriptionType = SubscriptionTypeEnum.PullSubscription,
+                            SmtpAddress = room.SmtpAddress
+                        };
+                        _context.SubscriptionEntities.Add(dbSubscription);
+                    }
+
+                    try
+                    {
+                        var roomService = new EWService(EwsToken);
+                        var subscription = roomService.CreatePullSubscription(ConnectingIdType.SmtpAddress, room.SmtpAddress, pollingTimeout, watermark);
+
+                        // close out the old subscription
+                        dbSubscription.PreviousWatermark = (!string.IsNullOrEmpty(watermark)) ? watermark : null;
+                        dbSubscription.SubscriptionId = subscription.Id;
+                        dbSubscription.Watermark = subscription.Watermark;
+
+
+                        Trace.WriteLine($"ListenToRoomReservationChangesAsync.Subscribed to room {room.SmtpAddress}");
+                        subscriptions.Add(new SubscriptionCollection()
+                        {
+                            Pulling = subscription,
+                            SmtpAddress = room.SmtpAddress,
+                            DatabaseSubscription = dbSubscription,
+                            SubscriptionType = SubscriptionTypeEnum.PullSubscription
+                        });
+
+                        var rowChanged = _context.SaveChanges();
+                        Trace.WriteLine($"Pull subscription persisted {rowChanged} rows");
+
+                    }
+                    catch (Microsoft.Exchange.WebServices.Data.ServiceRequestException srex)
+                    {
+                        Trace.WriteLine($"Failed to provision subscription {srex.Message}");
+                        throw new Exception($"Subscription could not be created for {room.SmtpAddress} with MSG:{srex.Message}");
+                    }
+                }
+
+            }
+
+
             try
             {
                 var waitTimer = new TimeSpan(0, 5, 0);
@@ -254,7 +409,37 @@ namespace EWSResourceSync
             Trace.WriteLine($"PullSubscriptionChangesAsync({mailboxOwner}) exiting");
         }
 
+        /// <summary>
+        /// Enable the synchronization of individual folders or Room[s]
+        /// </summary>
+        /// <param name="folderInfo"></param>
+        public static void ProcessChanges(object folderInfo)
+        {
+            bool moreChangesAvailable;
+            EWSFolderInfo info = (EWSFolderInfo)folderInfo;
+            do
+            {
+                // Get all changes since the last call. The synchronization cookie is stored in the _SynchronizationState field.
+                // Just get the IDs of the items.
+                // For performance reasons, do not use the PropertySet.FirstClassProperties.
+                var changes = info.Service.Current.SyncFolderItems(info.Folder, PropertySet.IdOnly, null, 512, SyncFolderItemsScope.NormalItems, info.SynchronizationState);
 
+                // Update the synchronization 
+                info.SynchronizationState = changes.SyncState;
+
+                // Process all changes. If required, add a GetItem call here to request additional properties.
+                foreach (ItemChange itemChange in changes)
+                {
+                    // This example just prints the ChangeType and ItemId to the console.
+                    // A LOB application would apply business rules to each 
+                    Trace.WriteLine($"ChangeType = {itemChange.ChangeType} with ItemId {itemChange.ItemId.ToString()}");
+                }
+
+                // If more changes are available, issue additional SyncFolderItems requests.
+                moreChangesAvailable = changes.MoreChangesAvailable;
+            }
+            while (moreChangesAvailable);
+        }
 
 
         #region Trap application termination
@@ -307,6 +492,7 @@ namespace EWSResourceSync
 
             return true;
         }
+
         #endregion
     }
 }

@@ -130,37 +130,6 @@ namespace EWS.Common.Services
         }
 
         /// <summary>
-        /// Creates streaming subscription for the specific room
-        /// </summary>
-        /// <param name="connectingIdType"></param>
-        /// <param name="roomAddress"></param>
-        /// <returns></returns>
-        public StreamingSubscription CreateStreamingSubscription(ConnectingIdType connectingIdType, string roomAddress)
-        {
-            ServicePointManager.DefaultConnectionLimit = ServicePointManager.DefaultPersistentConnectionLimit;
-
-            try
-            {
-                //TODO: Is there a more scalable way so we don't need to subscribe to each room individually?
-                SetImpersonation(connectingIdType, roomAddress);
-
-                // TODO: How to reconnect after app failure and get all events since failure occured
-                var sub = ExchangeService.SubscribeToStreamingNotifications(
-                    new FolderId[] { WellKnownFolderName.Calendar },
-                    EventType.Created, EventType.Deleted, EventType.Modified, EventType.Moved, EventType.Copied);
-
-
-                Trace.WriteLine($"CreateStreamingSubscription {sub.Id} to room {roomAddress}");
-                return sub;
-            }
-            catch (Microsoft.Exchange.WebServices.Data.ServiceRequestException srex)
-            {
-                Trace.WriteLine($"Failed to provision subscription {srex.Message}");
-                throw new Exception($"Subscription could not be created for {roomAddress} with MSG:{srex.Message}");
-            }
-        }
-
-        /// <summary>
         /// 
         /// </summary>
         /// <param name="connectingIdType"></param>
