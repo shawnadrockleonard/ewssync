@@ -63,9 +63,11 @@ namespace EWSServiceBusReadFromO365
 
                 var queueSubscription = EWSConstants.Config.ServiceBus.O365Subscription;
                 var receiveO365Subscriptions = Messenger.ReceiveQueueO365ChangesAsync(queueSubscription);
+                tasks.Add(receiveO365Subscriptions);
 
                 var queueSync = EWSConstants.Config.ServiceBus.O365Sync;
                 var receiveO365Sync = Messenger.ReceiveQueueO365SyncFoldersAsync(queueSync);
+                tasks.Add(receiveO365Sync);
 
                 // Wait for each thread
                 System.Threading.Tasks.Task.WaitAll(tasks.ToArray());

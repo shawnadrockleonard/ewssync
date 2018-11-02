@@ -35,6 +35,7 @@ namespace EWSServiceBusSendToO365
             Trace.AutoFlush = true;
             Trace.WriteLine("Capturing Send to O365 ...");
 
+
             var p = new Program();
 
             _handler += new EventHandler(p.ConsoleCtrlCheck);

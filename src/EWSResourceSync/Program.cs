@@ -66,14 +66,12 @@ namespace EWSResourceSync
 
         static void Main(string[] args)
         {
-
             Trace.Listeners.Add(new TextWriterTraceListener(Console.Out));
             Trace.AutoFlush = true;
             Trace.WriteLine("Starting...");
 
 
             var p = new Program();
-
 
             _handler += new EventHandler(p.ConsoleCtrlCheck);
             SetConsoleCtrlHandler(_handler, true);
@@ -856,6 +854,9 @@ namespace EWSResourceSync
             }
         }
 
+        /// <summary>
+        /// Close connections and unsubscribe
+        /// </summary>
         public void CloseConnections()
         {
             _traceListener.Trace("SyncProgram", $"ConsoleCtrlCheck CloseConnections at {DateTime.UtcNow}..");
@@ -939,15 +940,8 @@ namespace EWSResourceSync
         {
             _traceListener.Trace("SyncProgram", "Exiting system due to external CTRL-C, or process kill, or shutdown");
 
-
-            // should cancel all registered events
-            CancellationTokenSource.Cancel();
-
-
+            // dispose all threads
             Dispose();
-
-            // cleanup complete
-            _traceListener.Trace("SyncProgram", "Cleanup complete");
 
             //shutdown right away so there are no lingering threads
             Environment.Exit(-1);
@@ -957,8 +951,12 @@ namespace EWSResourceSync
 
         private void Dispose()
         {
+            Trace.WriteLine("Disposing");
             if (IsDisposed)
                 return;
+
+            // should cancel all registered events
+            CancellationTokenSource.Cancel();
 
             // issue into messenger
             Messenger.IssueCancellation(CancellationTokenSource);
@@ -969,8 +967,8 @@ namespace EWSResourceSync
             // should close out database and issue cancellation to token
             Messenger.Dispose();
 
-
             IsDisposed = true;
+            _traceListener.Trace("SyncProgram", "Cleanup complete");
         }
 
         #endregion
