@@ -1,19 +1,6 @@
-﻿using EWS.Common;
-using EWS.Common.Database;
-using EWS.Common.Services;
-using Microsoft.Exchange.WebServices.Data;
-using Microsoft.IdentityModel.Clients.ActiveDirectory;
-using Microsoft.ServiceBus.Messaging;
-using Newtonsoft.Json;
+﻿using EWS.Common.Services;
 using System;
 using System.Collections.Generic;
-using System.Configuration;
-using System.IO;
-using System.Linq;
-using System.Data.Entity;
-using System.Runtime.Serialization;
-using System.Text;
-using System.Threading.Tasks;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 

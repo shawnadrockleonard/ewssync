@@ -1,19 +1,9 @@
-﻿using EWS.Common.Database;
-using EWS.Common.Services;
-using Microsoft.Exchange.WebServices.Data;
-using Microsoft.IdentityModel.Clients.ActiveDirectory;
-using Microsoft.Azure.ServiceBus.Core;
-using Newtonsoft.Json;
+﻿using EWS.Common.Services;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Data.Entity;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Microsoft.Azure.ServiceBus;
-using System.Text;
 
 namespace EWSServiceBusSendToO365
 {
