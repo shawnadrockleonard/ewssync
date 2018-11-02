@@ -114,6 +114,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AppSettings.cs" />
+    <Compile Include="ClassTraceListener.cs" />
     <Compile Include="Database\DefaultUsageLogger.cs" />
     <Compile Include="Database\EntityRoomAppointment.cs" />
     <Compile Include="Database\EntityRoomListRoom.cs" />
@@ -125,7 +126,8 @@
     <Compile Include="Database\SubscriptionTypeEnum.cs" />
     <Compile Include="LoggedException.cs" />
     <Compile Include="Models\AppointmentObjectId.cs" />
-    <Compile Include="Models\BlockBooking.cs" />
+    <Compile Include="Models\ChangeBooking.cs" />
+    <Compile Include="Models\EventBooking.cs" />
     <Compile Include="Models\BookingChangeEnum.cs" />
     <Compile Include="Models\NotificationInfo.cs" />
     <Compile Include="Models\SubscriptionCollection.cs" />
@@ -135,7 +137,6 @@
     <Compile Include="Services\EWService.cs" />
     <Compile Include="Services\EWSFolderInfo.cs" />
     <Compile Include="Services\GroupInfo.cs" />
-    <Compile Include="Services\GroupInfoSubscriptionManager.cs" />
     <Compile Include="Services\ItemEventComparer.cs" />
     <Compile Include="Services\Mailboxes.cs" />
     <Compile Include="Services\MailboxInfo.cs" />

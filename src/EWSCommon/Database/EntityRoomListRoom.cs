@@ -29,10 +29,11 @@ namespace EWS.Common.Database
 
         public int? KnownEvents { get; set; }
 
-        public string SyncState { get; set; }
+        [Column("SyncState")]
+        public string SynchronizationState { get; set; }
 
-
-        public DateTime? SyncTimestamp { get; set; }
+        [Column("SyncTimestamp")]
+        public DateTime? SynchronizationTimestamp { get; set; }
 
         /// <summary>
         /// The collection of appointments associated with the room.

@@ -25,8 +25,6 @@ namespace EWS.Common.Services
 
         private string MailboxOwner { get; set; }
 
-        private EWSDbContext EwsDatabase { get; set; }
-
         private bool IsDisposed { get; set; }
 
         /// <summary>
@@ -49,16 +47,11 @@ namespace EWS.Common.Services
 
 
 
-        public MessageManager() : this(new CancellationTokenSource(), null)
-        {
-        }
-
         public MessageManager(CancellationTokenSource token, AuthenticationResult authenticationResult)
         {
             _cancel = token;
             Ewstoken = authenticationResult;
             MailboxOwner = EWSConstants.Config.Exchange.ImpersonationAcct;
-            EwsDatabase = new EWSDbContext(EWSConstants.Config.Database);
             RandomSeed = new Random();
         }
 
@@ -82,32 +75,33 @@ namespace EWS.Common.Services
             // Poll the rooms to store locally
             var roomlisting = EwsService.GetRoomListing();
 
-            foreach (var roomlist in roomlisting)
+            using (var EwsDatabase = new EWSDbContext(EWSConstants.Config.Database))
             {
-                foreach (var room in roomlist.Value)
+                foreach (var roomlist in roomlisting)
                 {
-                    EntityRoomListRoom databaseRoom = null;
-                    if (EwsDatabase.RoomListRoomEntities.Any(s => s.SmtpAddress == room.Address))
+                    foreach (var room in roomlist.Value)
                     {
-                        databaseRoom = await EwsDatabase.RoomListRoomEntities.FirstOrDefaultAsync(f => f.SmtpAddress == room.Address);
-                    }
-                    else
-                    {
-                        databaseRoom = new EntityRoomListRoom()
+                        EntityRoomListRoom databaseRoom = null;
+                        if (EwsDatabase.RoomListRoomEntities.Any(s => s.SmtpAddress == room.Address))
                         {
-                            SmtpAddress = room.Address,
-                            Identity = room.Address,
-                            RoomList = roomlist.Key
-                        };
-                        EwsDatabase.RoomListRoomEntities.Add(databaseRoom);
+                            databaseRoom = await EwsDatabase.RoomListRoomEntities.FirstOrDefaultAsync(f => f.SmtpAddress == room.Address);
+                        }
+                        else
+                        {
+                            databaseRoom = new EntityRoomListRoom()
+                            {
+                                SmtpAddress = room.Address,
+                                Identity = room.Address,
+                                RoomList = roomlist.Key
+                            };
+                            EwsDatabase.RoomListRoomEntities.Add(databaseRoom);
+                        }
                     }
                 }
+
+                var roomchanges = await EwsDatabase.SaveChangesAsync();
+                Trace.WriteLine($"Rooms {roomchanges} saved to database.");
             }
-
-
-            var roomchanges = await EwsDatabase.SaveChangesAsync();
-            Trace.WriteLine($"Rooms {roomchanges} saved to database.");
-
 
             var waitTimer = new TimeSpan(0, 5, 0);
             while (!_cancel.IsCancellationRequested)
@@ -115,51 +109,60 @@ namespace EWS.Common.Services
                 var milliseconds = (int)waitTimer.TotalMilliseconds;
 
                 // whatever you want to happen every 5 minutes
-                Trace.WriteLine($"PullRoomReservationChangesAsync({MailboxOwner}) starting at {DateTime.UtcNow.ToShortTimeString()}");
+                Trace.WriteLine($"SendQueueDatabaseChangesAsync({MailboxOwner}) starting at {DateTime.UtcNow.ToShortTimeString()}");
 
 
-                var i = 0;
-                var bookings = EwsDatabase.AppointmentEntities.Where(w => !w.ExistsInExchange || !w.SyncedWithExchange || (w.DeletedLocally && !w.SyncedWithExchange));
-                foreach (var booking in bookings)
+                using (var EwsDatabase = new EWSDbContext(EWSConstants.Config.Database))
                 {
-                    Microsoft.Exchange.WebServices.Data.EventType eventType = Microsoft.Exchange.WebServices.Data.EventType.Deleted;
-                    if (!booking.ExistsInExchange)
+                    var i = 0;
+                    var bookings = EwsDatabase.AppointmentEntities.Include(ictx => ictx.Room)
+                        .Where(w => !w.ExistsInExchange || !w.SyncedWithExchange || (w.DeletedLocally && !w.SyncedWithExchange));
+
+                    foreach (var booking in bookings)
                     {
-                        eventType = Microsoft.Exchange.WebServices.Data.EventType.Created;
+                        Microsoft.Exchange.WebServices.Data.EventType eventType = Microsoft.Exchange.WebServices.Data.EventType.Deleted;
+                        if (!booking.ExistsInExchange)
+                        {
+                            eventType = Microsoft.Exchange.WebServices.Data.EventType.Created;
+                        }
+                        else if (!booking.SyncedWithExchange)
+                        {
+                            eventType = Microsoft.Exchange.WebServices.Data.EventType.Modified;
+                        }
+
+                        if (string.IsNullOrEmpty(booking.BookingReference))
+                        {
+                            booking.BookingReference = $"Ref{booking.Id.ToString().PadLeft(6, '0')}";
+                        }
+
+                        var ewsbooking = new EWS.Common.Models.UpdatedBooking()
+                        {
+                            DatabaseId = booking.Id,
+                            MailBoxOwnerEmail = booking.OrganizerSmtpAddress,
+                            SiteMailBox = booking.Room.SmtpAddress,
+                            Subject = booking.Subject,
+                            Location = booking.Location,
+                            StartUTC = booking.StartUTC,
+                            EndUTC = booking.EndUTC,
+                            ExchangeId = booking.BookingId,
+                            ExchangeChangeKey = booking.BookingChangeKey,
+                            BookingReference = booking.BookingReference,
+                            ExchangeEvent = eventType
+                        };
+
+                        var message = new Message(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(ewsbooking)))
+                        {
+                            ContentType = "application/json",
+                            Label = SBMessageSyncDb,
+                            MessageId = i.ToString()
+                        };
+
+                        await sender.SendAsync(message);
+                        Trace.WriteLine($"{++i}. Sent: Id = {message.MessageId} w/ Subject:{booking.Subject}");
                     }
-                    else if (!booking.SyncedWithExchange)
-                    {
-                        eventType = Microsoft.Exchange.WebServices.Data.EventType.Modified;
-                    }
 
-                    var ewsbooking = new EWS.Common.Models.UpdatedBooking()
-                    {
-                        DatabaseId = booking.Id,
-                        MailBoxOwnerEmail = booking.OrganizerSmtpAddress,
-                        SiteMailBox = booking.Room.SmtpAddress,
-                        Subject = booking.Subject,
-                        Location = booking.Location,
-                        StartUTC = booking.StartUTC,
-                        EndUTC = booking.EndUTC,
-                        ExchangeId = booking.BookingId,
-                        ExchangeChangeKey = booking.BookingChangeKey,
-                        BookingReference = booking.BookingReference,
-                        ExchangeEvent = eventType
-                    };
-
-                    var message = new Message(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(ewsbooking)))
-                    {
-                        ContentType = "application/json",
-                        Label = SBMessageSyncDb,
-                        MessageId = i.ToString(),
-                        TimeToLive = TimeSpan.FromMinutes(2)
-                    };
-
-                    await sender.SendAsync(message);
-                    Trace.WriteLine($"{++i}. Sent: Id = {message.MessageId} w/ Subject:{booking.Subject}");
+                    Trace.WriteLine($"Sent {i} messages");
                 }
-
-                Trace.WriteLine($"Sent {i} messages");
 
                 Trace.WriteLine($"Sleeping at {DateTime.UtcNow} for {milliseconds} milliseconds...");
                 System.Threading.Thread.Sleep(milliseconds);
@@ -176,8 +179,6 @@ namespace EWS.Common.Services
         {
             var EwsService = new EWService(Ewstoken);
 
-            // Poll the rooms to store locally
-            var roomlisting = await EwsDatabase.RoomListRoomEntities.ToListAsync();
 
             var propertyIds = new List<PropertyDefinitionBase>()
             {
@@ -189,141 +190,171 @@ namespace EWS.Common.Services
                 EWSConstants.DatabaseIdPropertyDef
             };
 
-            var receiver = new MessageReceiver(queueConnection, SBQueueSyncDb, ReceiveMode.PeekLock);
+            var receiver = new MessageReceiver(queueConnection, SBQueueSyncDb, ReceiveMode.ReceiveAndDelete);
 
             _cancel.Token.Register(() => receiver.CloseAsync());
 
-            // With the receiver set up, we then enter into a simple receive loop that terminates 
             // when the cancellation token if triggered.
             while (!_cancel.Token.IsCancellationRequested)
             {
-                try
+                // whatever you want to happen every 5 minutes
+                Trace.WriteLine($"ReceiveQueueDatabaseChangesAsync({MailboxOwner}) starting at {DateTime.UtcNow.ToShortTimeString()}");
+
+
+                // With the receiver set up, we then enter into a simple receive loop that terminates 
+                using (var _context = new EWSDbContext(EWSConstants.Config.Database))
                 {
-                    // ask for the next message "forever" or until the cancellation token is triggered
-                    var message = await receiver.ReceiveAsync();
-                    if (message != null)
+                    try
                     {
-                        if (message.Label != null &&
-                           message.ContentType != null &&
-                           message.Label.Equals(SBMessageSyncDb, StringComparison.InvariantCultureIgnoreCase) &&
-                           message.ContentType.Equals("application/json", StringComparison.InvariantCultureIgnoreCase))
+                        // ask for the next message "forever" or until the cancellation token is triggered
+                        var message = await receiver.ReceiveAsync();
+                        if (message != null)
                         {
-                            // service bus
-                            // #TODO: Read bus events from database and write to O365
-                            var booking = JsonConvert.DeserializeObject<EWS.Common.Models.UpdatedBooking>(Encoding.UTF8.GetString(message.Body));
-                            Trace.WriteLine($"Msg received: {booking.SiteMailBox} - {booking.Subject}. Cancel status: {booking.ExchangeEvent.ToString("f")}");
-
-                            var eventType = booking.CancelStatus;
-                            var eventStatus = booking.ExchangeEvent;
-                            var itemId = booking.ExchangeId;
-                            var changeKey = booking.ExchangeChangeKey;
-
-                            var appointmentMailbox = booking.SiteMailBox;
-
-                            try
+                            if (message.Label != null &&
+                               message.ContentType != null &&
+                               message.Label.Equals(SBMessageSyncDb, StringComparison.InvariantCultureIgnoreCase) &&
+                               message.ContentType.Equals("application/json", StringComparison.InvariantCultureIgnoreCase))
                             {
-                                Appointment meeting = null;
+                                // service bus
+                                // #TODO: Read bus events from database and write to O365
+                                var booking = JsonConvert.DeserializeObject<EWS.Common.Models.UpdatedBooking>(Encoding.UTF8.GetString(message.Body));
+                                Trace.WriteLine($"Msg received: {booking.SiteMailBox} - {booking.Subject}. Cancel status: {booking.ExchangeEvent.ToString("f")}");
 
-                                if (!string.IsNullOrEmpty(itemId))
+                                var eventType = booking.CancelStatus;
+                                var eventStatus = booking.ExchangeEvent;
+                                var itemId = booking.ExchangeId;
+                                var changeKey = booking.ExchangeChangeKey;
+
+                                var appointmentMailbox = booking.SiteMailBox;
+                                try
                                 {
-                                    var exchangeId = new ItemId(itemId);
+                                    Appointment meeting = null;
 
-
-                                    if (eventStatus == EventType.Deleted)
+                                    if (!string.IsNullOrEmpty(itemId))
                                     {
+                                        var exchangeId = new ItemId(itemId);
 
+
+                                        if (eventStatus == EventType.Deleted)
+                                        {
+
+                                        }
+                                        else
+                                        {
+
+                                            if (string.IsNullOrEmpty(booking.BookingReference))
+                                            {
+                                                booking.BookingReference = $"Ref{booking.DatabaseId.ToString().PadLeft(6, '0')}";
+                                            }
+
+                                            EwsService.SetImpersonation(ConnectingIdType.SmtpAddress, booking.MailBoxOwnerEmail);
+
+                                            var subAppointment = EwsService.GetAppointment(ConnectingIdType.SmtpAddress, booking.SiteMailBox, exchangeId, propertyIds);
+
+                                            var parentAppt = EwsService.GetParentAppointment(subAppointment, propertyIds);
+
+                                            meeting = parentAppt.Item;
+                                            meeting.Subject = booking.Subject;
+                                            meeting.Start = booking.StartUTC;
+                                            meeting.End = booking.EndUTC;
+                                            meeting.Location = booking.Location;
+                                            //meeting.ReminderDueBy = DateTime.Now;
+                                            meeting.SetExtendedProperty(EWSConstants.RefIdPropertyDef, booking.BookingReference);
+                                            meeting.SetExtendedProperty(EWSConstants.DatabaseIdPropertyDef, booking.DatabaseId);
+                                            meeting.Update(ConflictResolutionMode.AutoResolve, SendInvitationsOrCancellationsMode.SendOnlyToChanged);
+
+                                            // Verify that the appointment was created by using the appointment's item ID.
+                                            var item = Item.Bind(EwsService.Current, meeting.Id, new PropertySet(propertyIds));
+                                            Trace.WriteLine($"Appointment modified: {item.Subject} && ReserveRoomAsync({booking.Location}) completed");
+
+                                            if (item is Appointment)
+                                            {
+                                                Trace.WriteLine($"Item is Appointment");
+                                            }
+                                        }
                                     }
                                     else
                                     {
 
-                                        var apptMeeting = EwsService.GetAppointment(ConnectingIdType.SmtpAddress, booking.MailBoxOwnerEmail, exchangeId, propertyIds);
-                                        meeting = apptMeeting.Item;
+                                        if (string.IsNullOrEmpty(booking.BookingReference))
+                                        {
+                                            booking.BookingReference = $"Ref{booking.DatabaseId.ToString().PadLeft(6, '0')}";
+                                        }
+
+                                        EwsService.SetImpersonation(ConnectingIdType.SmtpAddress, booking.MailBoxOwnerEmail);
+
+                                        meeting = new Appointment(EwsService.Current);
+                                        meeting.Resources.Add(booking.SiteMailBox);
                                         meeting.Subject = booking.Subject;
                                         meeting.Start = booking.StartUTC;
                                         meeting.End = booking.EndUTC;
                                         meeting.Location = booking.Location;
                                         //meeting.ReminderDueBy = DateTime.Now;
+                                        meeting.SetExtendedProperty(EWSConstants.RefIdPropertyDef, booking.BookingReference);
+                                        meeting.SetExtendedProperty(EWSConstants.DatabaseIdPropertyDef, booking.DatabaseId);
                                         meeting.Save(SendInvitationsMode.SendOnlyToAll);
 
                                         // Verify that the appointment was created by using the appointment's item ID.
                                         var item = Item.Bind(EwsService.Current, meeting.Id, new PropertySet(propertyIds));
-                                        Trace.WriteLine($"Appointment modified: {item.Subject} && ReserveRoomAsync({booking.Location}) completed");
+                                        Trace.WriteLine($"Appointment created: {item.Subject} && ReserveRoomAsync({booking.Location}) completed");
 
                                         if (item is Appointment)
                                         {
                                             Trace.WriteLine($"Item is Appointment");
                                         }
                                     }
+
+                                    // this should exists as this particular message was sent by the database
+                                    var dbAppointment = _context.AppointmentEntities.FirstOrDefault(a => a.Id == booking.DatabaseId);
+                                    if (dbAppointment != null)
+                                    {
+                                        dbAppointment.ExistsInExchange = true;
+                                        dbAppointment.SyncedWithExchange = true;
+                                        dbAppointment.ModifiedDate = DateTime.UtcNow;
+
+                                        if (meeting != null)
+                                        {
+                                            dbAppointment.BookingId = meeting.Id.UniqueId;
+                                            dbAppointment.BookingChangeKey = meeting.Id.ChangeKey;
+                                        }
+                                        else
+                                        {
+                                            dbAppointment.IsDeleted = true;
+                                        }
+
+                                        if (string.IsNullOrEmpty(dbAppointment.BookingReference)
+                                            || !dbAppointment.BookingReference.Equals(booking.BookingReference))
+                                        {
+                                            dbAppointment.BookingReference = booking.BookingReference;
+                                        }
+                                    }
+
+                                    var appointmentsSaved = _context.SaveChanges();
+                                    Trace.WriteLine($"Saved {appointmentsSaved} rows");
                                 }
-                                else
+                                catch (Exception dbex)
                                 {
-                                    EwsService.SetImpersonation(ConnectingIdType.SmtpAddress, booking.MailBoxOwnerEmail);
-
-                                    meeting = new Appointment(EwsService.Current);
-                                    meeting.Resources.Add(booking.SiteMailBox);
-                                    meeting.Subject = booking.Subject;
-                                    meeting.Start = booking.StartUTC;
-                                    meeting.End = booking.EndUTC;
-                                    meeting.Location = booking.Location;
-                                    meeting.SetExtendedProperty(EWSConstants.RefIdPropertyDef, booking.BookingReference);
-                                    meeting.SetExtendedProperty(EWSConstants.DatabaseIdPropertyDef, booking.DatabaseId);
-                                    //meeting.ReminderDueBy = DateTime.Now;
-                                    meeting.Save(SendInvitationsMode.SendOnlyToAll);
-
-                                    // Verify that the appointment was created by using the appointment's item ID.
-                                    var item = Item.Bind(EwsService.Current, meeting.Id, new PropertySet(propertyIds));
-                                    Trace.WriteLine($"Appointment created: {item.Subject} && ReserveRoomAsync({booking.Location}) completed");
-
-                                    if (item is Appointment)
-                                    {
-                                        Trace.WriteLine($"Item is Appointment");
-                                    }
+                                    Trace.WriteLine($"Error occurred in Appointment creation or Database change {dbex}");
                                 }
-
-                                // this should exists as this particular message was sent by the database
-                                var dbAppointment = EwsDatabase.AppointmentEntities.FirstOrDefault(a => a.Id == booking.DatabaseId);
-                                if (dbAppointment != null)
+                                finally
                                 {
-                                    dbAppointment.ExistsInExchange = true;
-                                    dbAppointment.SyncedWithExchange = true;
-                                    dbAppointment.ModifiedDate = DateTime.UtcNow;
-
-                                    if (meeting != null)
-                                    {
-                                        dbAppointment.BookingId = meeting.Id.UniqueId;
-                                        dbAppointment.BookingChangeKey = meeting.Id.ChangeKey;
-                                    }
-                                    else
-                                    {
-                                        dbAppointment.IsDeleted = true;
-                                    }
+                                    //await receiver.CompleteAsync(message.SystemProperties.LockToken);
                                 }
-
-                                var appointmentsSaved = EwsDatabase.SaveChanges();
-                                Trace.WriteLine($"Saved {appointmentsSaved} rows");
                             }
-                            catch (Exception dbex)
+                            else
                             {
-                                Trace.WriteLine($"Error occurred in Appointment creation or Database change {dbex}");
+                                // purge / log it
+                                await receiver.DeadLetterAsync(message.SystemProperties.LockToken);//, "ProcessingError", "Don't know what to do with this message");
                             }
-                            finally
-                            {
-                                await receiver.CompleteAsync(message.SystemProperties.LockToken);
-                            }
-                        }
-                        else
-                        {
-                            // purge / log it
-                            await receiver.DeadLetterAsync(message.SystemProperties.LockToken);//, "ProcessingError", "Don't know what to do with this message");
                         }
                     }
-                }
-                catch (ServiceBusException e)
-                {
-                    if (!e.IsTransient)
+                    catch (ServiceBusException e)
                     {
-                        Trace.WriteLine(e.Message);
-                        throw;
+                        if (!e.IsTransient)
+                        {
+                            Trace.WriteLine(e.Message);
+                            throw;
+                        }
                     }
                 }
             }
@@ -363,8 +394,7 @@ namespace EWS.Common.Services
             {
                 ContentType = "application/json",
                 Label = SBMessageSubscriptionO365,
-                MessageId = i.ToString(),
-                TimeToLive = TimeSpan.FromMinutes(20)
+                MessageId = i.ToString()
             };
 
             await sender.SendAsync(message);
@@ -382,7 +412,7 @@ namespace EWS.Common.Services
 
             var EwsService = new EWService(Ewstoken);
 
-            var receiver = new MessageReceiver(queueConnection, SBQueueSubscriptionO365, ReceiveMode.PeekLock);
+            var receiver = new MessageReceiver(queueConnection, SBQueueSubscriptionO365, ReceiveMode.ReceiveAndDelete);
 
             _cancel.Token.Register(() => receiver.CloseAsync());
 
@@ -409,125 +439,133 @@ namespace EWS.Common.Services
             };
 
             // With the receiver set up, we then enter into a simple receive loop that terminates 
-            // when the cancellation token if triggered.
-            while (!_cancel.Token.IsCancellationRequested)
+            using (var EwsDatabase = new EWSDbContext(EWSConstants.Config.Database))
             {
-                try
+
+                // when the cancellation token if triggered.
+                while (!_cancel.Token.IsCancellationRequested)
                 {
-                    // ask for the next message "forever" or until the cancellation token is triggered
-                    var message = await receiver.ReceiveAsync();
-                    if (message != null)
+                    try
                     {
-                        if (message.Label != null &&
-                           message.ContentType != null &&
-                           message.Label.Equals(SBMessageSubscriptionO365, StringComparison.InvariantCultureIgnoreCase) &&
-                           message.ContentType.Equals("application/json", StringComparison.InvariantCultureIgnoreCase))
+                        // ask for the next message "forever" or until the cancellation token is triggered
+                        var message = await receiver.ReceiveAsync();
+                        if (message != null)
                         {
-                            // service bus
-                            // #TODO: Read bus events from O365 and write to Database
-                            var booking = JsonConvert.DeserializeObject<EWS.Common.Models.EventBooking>(Encoding.UTF8.GetString(message.Body));
-                            Trace.WriteLine($"Msg received: {booking.SiteMailBox} status: {booking.EventType.ToString("f")}");
-
-                            var eventType = booking.EventType;
-                            var itemId = booking.ExchangeId;
-                            var changeKey = booking.ExchangeChangeKey;
-                            var appointmentMailbox = booking.SiteMailBox;
-
-                            try
+                            if (message.Label != null &&
+                               message.ContentType != null &&
+                               message.Label.Equals(SBMessageSubscriptionO365, StringComparison.InvariantCultureIgnoreCase) &&
+                               message.ContentType.Equals("application/json", StringComparison.InvariantCultureIgnoreCase))
                             {
-                                Appointment meeting = null;
+                                // service bus
+                                // #TODO: Read bus events from O365 and write to Database
+                                var booking = JsonConvert.DeserializeObject<EWS.Common.Models.EventBooking>(Encoding.UTF8.GetString(message.Body));
+                                Trace.WriteLine($"Msg received: {booking.SiteMailBox} status: {booking.EventType.ToString("f")}");
 
+                                var eventType = booking.EventType;
+                                var itemId = booking.ExchangeId;
+                                var changeKey = booking.ExchangeChangeKey;
+                                var appointmentMailbox = booking.SiteMailBox;
 
-                                var dbroom = EwsDatabase.RoomListRoomEntities.FirstOrDefault(f => f.SmtpAddress == appointmentMailbox);
-
-
-                                if (eventType == EventType.Deleted)
+                                try
                                 {
-                                    var entity = EwsDatabase.AppointmentEntities.FirstOrDefault(f => f.BookingId == itemId);
-                                    entity.IsDeleted = true;
-                                    entity.ModifiedDate = DateTime.UtcNow;
-                                    entity.SyncedWithExchange = true;
-                                    entity.ExistsInExchange = true;
-                                }
-                                else
-                                {
+                                    Appointment meeting = null;
 
-                                    var appointmentTime = EwsService.GetAppointment(ConnectingIdType.SmtpAddress, appointmentMailbox, itemId, filterPropertyList);
 
-                                    var parentAppointment = EwsService.GetParentAppointment(appointmentTime, filterPropertyList);
-                                    meeting = parentAppointment.Item;
+                                    var dbroom = EwsDatabase.RoomListRoomEntities.Include(idxt => idxt.Appointments).FirstOrDefault(f => f.SmtpAddress == appointmentMailbox);
 
-                                    var mailboxId = parentAppointment.Organizer.Address;
-                                    var refId = parentAppointment.ReferenceId;
-                                    var meetingKey = parentAppointment.MeetingKey;
 
-                                    // TODO: move this to the ServiceBus Processing
-                                    if ((!string.IsNullOrEmpty(refId) || meetingKey.HasValue)
-                                        && EwsDatabase.AppointmentEntities.Any(f => f.BookingReference == refId || f.Id == meetingKey))
+                                    if (eventType == EventType.Deleted)
                                     {
-                                        var entity = EwsDatabase.AppointmentEntities.FirstOrDefault(f => f.BookingReference == refId || f.Id == meetingKey);
-
-                                        entity.EndUTC = meeting.End.ToUniversalTime();
-                                        entity.StartUTC = meeting.Start.ToUniversalTime();
-                                        entity.ExistsInExchange = true;
-                                        entity.IsRecurringMeeting = meeting.IsRecurring;
-                                        entity.Location = meeting.Location;
-                                        entity.OrganizerSmtpAddress = mailboxId;
-                                        entity.Subject = meeting.Subject;
-                                        entity.RecurrencePattern = (meeting.Recurrence == null) ? string.Empty : meeting.Recurrence.ToString();
-                                        entity.BookingReference = refId;
-                                        entity.BookingChangeKey = changeKey;
-                                        entity.BookingId = itemId;
+                                        var entity = dbroom.Appointments.FirstOrDefault(f => f.BookingId == itemId);
+                                        entity.IsDeleted = true;
                                         entity.ModifiedDate = DateTime.UtcNow;
                                         entity.SyncedWithExchange = true;
-
+                                        entity.ExistsInExchange = true;
                                     }
                                     else
                                     {
-                                        var entity = new EntityRoomAppointment()
-                                        {
-                                            BookingReference = refId,
-                                            BookingId = itemId,
-                                            BookingChangeKey = changeKey,
-                                            EndUTC = meeting.End.ToUniversalTime(),
-                                            StartUTC = meeting.Start.ToUniversalTime(),
-                                            ExistsInExchange = true,
-                                            IsRecurringMeeting = meeting.IsRecurring,
-                                            Location = meeting.Location,
-                                            OrganizerSmtpAddress = mailboxId,
-                                            Subject = meeting.Subject,
-                                            RecurrencePattern = (meeting.Recurrence == null) ? string.Empty : meeting.Recurrence.ToString(),
-                                            Room = dbroom
-                                        };
-                                        EwsDatabase.AppointmentEntities.Add(entity);
-                                    }
-                                }
 
-                                var appointmentsSaved = EwsDatabase.SaveChanges();
-                                Trace.WriteLine($"Saved {appointmentsSaved} rows");
+                                        var appointmentTime = EwsService.GetAppointment(ConnectingIdType.SmtpAddress, appointmentMailbox, itemId, filterPropertyList);
+
+                                        if (!filterPropertyList.Any(fp => fp == AppointmentSchema.Recurrence))
+                                        {
+                                            filterPropertyList.Add(AppointmentSchema.Recurrence);
+                                        }
+                                        var parentAppointment = EwsService.GetParentAppointment(appointmentTime, filterPropertyList);
+                                        meeting = parentAppointment.Item;
+
+                                        var mailboxId = parentAppointment.Organizer.Address;
+                                        var refId = parentAppointment.ReferenceId;
+                                        var meetingKey = parentAppointment.MeetingKey;
+
+                                        // TODO: move this to the ServiceBus Processing
+                                        if ((!string.IsNullOrEmpty(refId) || meetingKey.HasValue)
+                                            && dbroom.Appointments.Any(f => f.BookingReference == refId || f.Id == meetingKey))
+                                        {
+                                            var entity = dbroom.Appointments.FirstOrDefault(f => f.BookingReference == refId || f.Id == meetingKey);
+
+                                            entity.EndUTC = meeting.End.ToUniversalTime();
+                                            entity.StartUTC = meeting.Start.ToUniversalTime();
+                                            entity.ExistsInExchange = true;
+                                            entity.IsRecurringMeeting = meeting.IsRecurring;
+                                            entity.Location = meeting.Location;
+                                            entity.OrganizerSmtpAddress = mailboxId;
+                                            entity.Subject = meeting.Subject;
+                                            entity.RecurrencePattern = (meeting.Recurrence == null) ? string.Empty : meeting.Recurrence.ToString();
+                                            entity.BookingReference = refId;
+                                            entity.BookingChangeKey = changeKey;
+                                            entity.BookingId = itemId;
+                                            entity.ModifiedDate = DateTime.UtcNow;
+                                            entity.SyncedWithExchange = true;
+
+                                        }
+                                        else
+                                        {
+                                            var entity = new EntityRoomAppointment()
+                                            {
+                                                BookingReference = refId,
+                                                BookingId = itemId,
+                                                BookingChangeKey = changeKey,
+                                                EndUTC = meeting.End.ToUniversalTime(),
+                                                StartUTC = meeting.Start.ToUniversalTime(),
+                                                ExistsInExchange = true,
+                                                IsRecurringMeeting = meeting.IsRecurring,
+                                                Location = meeting.Location,
+                                                OrganizerSmtpAddress = mailboxId,
+                                                Subject = meeting.Subject,
+                                                RecurrencePattern = (meeting.Recurrence == null) ? string.Empty : meeting.Recurrence.ToString(),
+                                                ModifiedDate = DateTime.UtcNow
+                                            };
+                                            dbroom.Appointments.Add(entity);
+                                        }
+                                    }
+
+                                    var appointmentsSaved = EwsDatabase.SaveChanges();
+                                    Trace.WriteLine($"Saved {appointmentsSaved} rows");
+                                }
+                                catch (Exception dbex)
+                                {
+                                    Trace.WriteLine($"Error occurred in Appointment creation or Database change {dbex}");
+                                }
+                                finally
+                                {
+                                    // await receiver.CompleteAsync(message.SystemProperties.LockToken);
+                                }
                             }
-                            catch (Exception dbex)
+                            else
                             {
-                                Trace.WriteLine($"Error occurred in Appointment creation or Database change {dbex}");
+                                // purge / log it
+                                await receiver.DeadLetterAsync(message.SystemProperties.LockToken);//, "ProcessingError", "Don't know what to do with this message");
                             }
-                            finally
-                            {
-                                await receiver.CompleteAsync(message.SystemProperties.LockToken);
-                            }
-                        }
-                        else
-                        {
-                            // purge / log it
-                            await receiver.DeadLetterAsync(message.SystemProperties.LockToken);//, "ProcessingError", "Don't know what to do with this message");
                         }
                     }
-                }
-                catch (ServiceBusException e)
-                {
-                    if (!e.IsTransient)
+                    catch (ServiceBusException e)
                     {
-                        Trace.WriteLine(e.Message);
-                        throw;
+                        if (!e.IsTransient)
+                        {
+                            Trace.WriteLine(e.Message);
+                            throw;
+                        }
                     }
                 }
             }
@@ -541,38 +579,30 @@ namespace EWS.Common.Services
         /// <param name="roomSmtp"></param>
         /// <param name="roomEvent"></param>
         /// <returns></returns>
-        public async System.Threading.Tasks.Task SendQueueO365SyncFoldersAsync(string queueConnection, string roomSmtp, ItemEvent roomEvent)
+        public async System.Threading.Tasks.Task SendQueueO365SyncFoldersAsync(string queueConnection, string roomSmtp, ItemChange roomEvent)
         {
             var sender = new MessageSender(queueConnection, SBQueueSyncO365);
 
-            Trace.WriteLine($"SendQueueO365SyncFoldersAsync({roomSmtp}, {roomEvent.EventType.ToString("f")}) status");
+            Trace.WriteLine($"SendQueueO365SyncFoldersAsync({roomSmtp}, {roomEvent.ChangeType.ToString("f")}) status");
             var i = RandomSeed.Next(1, 15679);
 
-            var ewsbooking = new EventBooking()
+            var ewsbooking = new ChangeBooking()
             {
                 SiteMailBox = roomSmtp,
-                EventType = roomEvent.EventType,
-                TimeStamp = roomEvent.TimeStamp,
+                EventType = roomEvent.ChangeType,
                 ExchangeId = roomEvent.ItemId.UniqueId,
                 ExchangeChangeKey = roomEvent.ItemId.ChangeKey
             };
-
-            if (roomEvent.OldItemId != null)
-            {
-                ewsbooking.OldExchangeId = roomEvent.OldItemId.UniqueId;
-                ewsbooking.OldExchangeChangeKey = roomEvent.OldItemId.ChangeKey;
-            }
 
             var message = new Message(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(ewsbooking)))
             {
                 ContentType = "application/json",
                 Label = SBMessageSyncO365,
-                MessageId = i.ToString(),
-                TimeToLive = TimeSpan.FromMinutes(20)
+                MessageId = i.ToString()
             };
 
             await sender.SendAsync(message);
-            Trace.WriteLine($"SendQueueO365SyncFoldersAsync({roomSmtp}, {roomEvent.EventType.ToString("f")}) status => sent: Id = {message.MessageId}");
+            Trace.WriteLine($"SendQueueO365SyncFoldersAsync({roomSmtp}, {roomEvent.ChangeType.ToString("f")}) status => sent: Id = {message.MessageId}");
         }
 
         /// <summary>
@@ -586,7 +616,7 @@ namespace EWS.Common.Services
 
             var EwsService = new EWService(Ewstoken);
 
-            var receiver = new MessageReceiver(queueConnection, SBQueueSyncO365, ReceiveMode.PeekLock);
+            var receiver = new MessageReceiver(queueConnection, SBQueueSyncO365, ReceiveMode.ReceiveAndDelete);
 
             _cancel.Token.Register(() => receiver.CloseAsync());
 
@@ -613,35 +643,132 @@ namespace EWS.Common.Services
             };
 
             // With the receiver set up, we then enter into a simple receive loop that terminates 
-            // when the cancellation token if triggered.
-            while (!_cancel.Token.IsCancellationRequested)
+            using (var EwsDatabase = new EWSDbContext(EWSConstants.Config.Database))
             {
-                try
-                {
-                    // ask for the next message "forever" or until the cancellation token is triggered
-                    var message = await receiver.ReceiveAsync();
-                    if (message != null)
-                    {
-                        if (message.Label != null &&
-                           message.ContentType != null &&
-                           message.Label.Equals(SBMessageSyncO365, StringComparison.InvariantCultureIgnoreCase) &&
-                           message.ContentType.Equals("application/json", StringComparison.InvariantCultureIgnoreCase))
-                        {
 
-                        }
-                        else
+                // when the cancellation token if triggered.
+                while (!_cancel.Token.IsCancellationRequested)
+                {
+                    try
+                    {
+                        // ask for the next message "forever" or until the cancellation token is triggered
+                        var message = await receiver.ReceiveAsync();
+                        if (message != null)
                         {
-                            // purge / log it
-                            await receiver.DeadLetterAsync(message.SystemProperties.LockToken);//, "ProcessingError", "Don't know what to do with this message");
+                            if (message.Label != null &&
+                               message.ContentType != null &&
+                               message.Label.Equals(SBMessageSyncO365, StringComparison.InvariantCultureIgnoreCase) &&
+                               message.ContentType.Equals("application/json", StringComparison.InvariantCultureIgnoreCase))
+                            {
+                                // service bus
+                                // #TODO: Read bus events from O365 and write to Database
+                                var booking = JsonConvert.DeserializeObject<EWS.Common.Models.ChangeBooking>(Encoding.UTF8.GetString(message.Body));
+                                Trace.WriteLine($"Msg received: {booking.SiteMailBox} status: {booking.EventType.ToString("f")}");
+
+                                var eventType = booking.EventType;
+                                var itemId = booking.ExchangeId;
+                                var changeKey = booking.ExchangeChangeKey;
+                                var appointmentMailbox = booking.SiteMailBox;
+                                try
+                                {
+                                    Appointment meeting = null;
+
+
+                                    var dbroom = EwsDatabase.RoomListRoomEntities.Include(idxt => idxt.Appointments).FirstOrDefault(f => f.SmtpAddress == appointmentMailbox);
+
+
+                                    if (eventType == ChangeType.Delete)
+                                    {
+                                        var entity = dbroom.Appointments.FirstOrDefault(f => f.BookingId == itemId);
+                                        entity.IsDeleted = true;
+                                        entity.ModifiedDate = DateTime.UtcNow;
+                                        entity.SyncedWithExchange = true;
+                                        entity.ExistsInExchange = true;
+                                    }
+                                    else
+                                    {
+
+                                        var appointmentTime = EwsService.GetAppointment(ConnectingIdType.SmtpAddress, appointmentMailbox, itemId, filterPropertyList);
+
+                                        if (!filterPropertyList.Any(fp => fp == AppointmentSchema.Recurrence))
+                                        {
+                                            filterPropertyList.Add(AppointmentSchema.Recurrence);
+                                        }
+                                        var parentAppointment = EwsService.GetParentAppointment(appointmentTime, filterPropertyList);
+                                        meeting = parentAppointment.Item;
+
+                                        var mailboxId = parentAppointment.Organizer.Address;
+                                        var refId = parentAppointment.ReferenceId;
+                                        var meetingKey = parentAppointment.MeetingKey;
+
+                                        // TODO: move this to the ServiceBus Processing
+                                        if ((!string.IsNullOrEmpty(refId) || meetingKey.HasValue)
+                                            && dbroom.Appointments.Any(f => f.BookingReference == refId || f.Id == meetingKey))
+                                        {
+                                            var entity = dbroom.Appointments.FirstOrDefault(f => f.BookingReference == refId || f.Id == meetingKey);
+
+                                            entity.EndUTC = meeting.End.ToUniversalTime();
+                                            entity.StartUTC = meeting.Start.ToUniversalTime();
+                                            entity.ExistsInExchange = true;
+                                            entity.IsRecurringMeeting = meeting.IsRecurring;
+                                            entity.Location = meeting.Location;
+                                            entity.OrganizerSmtpAddress = mailboxId;
+                                            entity.Subject = meeting.Subject;
+                                            entity.RecurrencePattern = (meeting.Recurrence == null) ? string.Empty : meeting.Recurrence.ToString();
+                                            entity.BookingReference = refId;
+                                            entity.BookingChangeKey = changeKey;
+                                            entity.BookingId = itemId;
+                                            entity.ModifiedDate = DateTime.UtcNow;
+                                            entity.SyncedWithExchange = true;
+
+                                        }
+                                        else
+                                        {
+                                            var entity = new EntityRoomAppointment()
+                                            {
+                                                BookingReference = refId,
+                                                BookingId = itemId,
+                                                BookingChangeKey = changeKey,
+                                                EndUTC = meeting.End.ToUniversalTime(),
+                                                StartUTC = meeting.Start.ToUniversalTime(),
+                                                ExistsInExchange = true,
+                                                IsRecurringMeeting = meeting.IsRecurring,
+                                                Location = meeting.Location,
+                                                OrganizerSmtpAddress = mailboxId,
+                                                Subject = meeting.Subject,
+                                                RecurrencePattern = (meeting.Recurrence == null) ? string.Empty : meeting.Recurrence.ToString(),
+                                                ModifiedDate = DateTime.UtcNow
+                                            };
+                                            dbroom.Appointments.Add(entity);
+                                        }
+                                    }
+
+                                    var appointmentsSaved = EwsDatabase.SaveChanges();
+                                    Trace.WriteLine($"Saved {appointmentsSaved} rows");
+                                }
+                                catch (Exception dbex)
+                                {
+                                    Trace.WriteLine($"Error occurred in Appointment creation or Database change {dbex}");
+                                }
+                                finally
+                                {
+                                    //await receiver.CompleteAsync(message.SystemProperties.LockToken);
+                                }
+                            }
+                            else
+                            {
+                                // purge / log it
+                                await receiver.DeadLetterAsync(message.SystemProperties.LockToken);//, "ProcessingError", "Don't know what to do with this message");
+                            }
                         }
                     }
-                }
-                catch (ServiceBusException e)
-                {
-                    if (!e.IsTransient)
+                    catch (ServiceBusException e)
                     {
-                        Trace.WriteLine(e.Message);
-                        throw;
+                        if (!e.IsTransient)
+                        {
+                            Trace.WriteLine(e.Message);
+                            throw;
+                        }
                     }
                 }
             }
@@ -792,32 +919,12 @@ namespace EWS.Common.Services
         #endregion
 
 
-        #region Database Methods
-
-
-        /// <summary>
-        /// Save database changes asynchronously
-        /// </summary>
-        /// <returns></returns>
-        public async System.Threading.Tasks.Task<int> SaveDbChangesAsync()
-        {
-            return await EwsDatabase.SaveChangesAsync(_cancel.Token);
-        }
-
-        #endregion
-
-
         public void Dispose()
         {
-            if (!IsDisposed)
-            {
-                // issue any remaining saves
-                var rowchanges = EwsDatabase.SaveChanges();
-                Trace.WriteLine($"Saved miscellaneous rows {rowchanges}");
+            if (IsDisposed)
+                return;
 
-                // close database connection
-                EwsDatabase.Dispose();
-            }
+            Trace.WriteLine($"MessageManager is disposing at {DateTime.UtcNow}");
 
             if (_cancel.IsCancellationRequested)
             {
@@ -832,6 +939,8 @@ namespace EWS.Common.Services
                     Trace.WriteLine($"Cancellation of token failed with message {ex.Message}");
                 }
             }
+
+            IsDisposed = true;
         }
     }
 }

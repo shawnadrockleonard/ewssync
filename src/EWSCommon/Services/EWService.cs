@@ -65,10 +65,14 @@ namespace EWS.Common.Services
             ExchangeService = new ExchangeService(ExchangeVersion.Exchange2013, TimeZoneInfo.Local)
             {
                 Url = new Uri($"{EWSConstants.EWSUrl}/EWS/Exchange.asmx"),
-                TraceEnabled = enableTrace,
-                TraceFlags = TraceFlags.All,
                 Credentials = new OAuthCredentials(Tokens.AccessToken)
             };
+
+            if(enableTrace)
+            {
+                ExchangeService.TraceEnabled = enableTrace;
+                ExchangeService.TraceFlags = TraceFlags.All;
+            }
         }
 
         /// <summary>

@@ -10,14 +10,10 @@ namespace EWS.Common.Services
 {
     public class GroupInfo
     {
-        private readonly string _name = "";
-        private string _primaryMailbox = "";
-        private List<string> _mailboxes;
-        //private List<StreamingSubscriptionConnection> _streamingConnection;
-        private ExchangeService _exchangeService = null;
         private ITraceListener _traceListener = null;
+
         private readonly string _ewsUrl = "";
-        private bool _isConnectionOpen = false;
+
         private AuthenticationResult ewsToken { get; set; }
 
 
@@ -34,6 +30,7 @@ namespace EWS.Common.Services
             ewsToken = authentication;
         }
 
+        private readonly string _name = "";
         public string Name
         {
             get { return _name; }
@@ -44,6 +41,7 @@ namespace EWS.Common.Services
         /// </summary>
         public string GroupInfoName { get; set; }
 
+        private string _primaryMailbox = "";
         public string PrimaryMailbox
         {
             get { return _primaryMailbox; }
@@ -56,6 +54,7 @@ namespace EWS.Common.Services
             }
         }
 
+        private ExchangeService _exchangeService = null;
         public ExchangeService ExchangeService
         {
             get
@@ -84,6 +83,7 @@ namespace EWS.Common.Services
         }
 
 
+        private List<string> _mailboxes;
         public List<string> Mailboxes
         {
             get { return _mailboxes; }
@@ -106,6 +106,7 @@ namespace EWS.Common.Services
         }
 
 
+        private bool _isConnectionOpen = false;
         public bool IsConnectionOpen
         {
             get { return _isConnectionOpen; }
