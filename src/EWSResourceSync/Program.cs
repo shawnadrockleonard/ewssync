@@ -96,8 +96,7 @@ namespace EWSResourceSync
             }
 
             //hold the console so it doesn’t run off the end
-            Trace.WriteLine("Done.   Press any key to terminate.");
-            Console.ReadLine();
+            Trace.WriteLine("Done.  Now terminating.");
         }
 
         static Program()
@@ -116,10 +115,11 @@ namespace EWSResourceSync
 
             EwsToken = await EWSConstants.AcquireTokenAsync();
 
-            Messenger = new MessageManager(CancellationTokenSource, EwsToken);
+            Messenger = new MessageManager(CancellationTokenSource);
 
             ServiceCredentials = new OAuthCredentials(EwsToken.AccessToken);
 
+            _reconnect = true;
             _groups = new Dictionary<string, GroupInfo>();
             _mailboxes = new Mailboxes(ServiceCredentials, _traceListener);
             _subscriptions = new List<SubscriptionCollection>();
@@ -177,13 +177,17 @@ namespace EWSResourceSync
 
                 var tasks = new List<System.Threading.Tasks.Task>();
 
+
                 if (EWSConstants.Config.Exchange.PullEnabled)
                 {
+                    // Upon completion tick repeater to poll subscriptions
                     tasks.Add(PullSubscriptionChangesAsync(impersonationId));
                 }
-
-                // Upon completion kick of streamingsubscription
-                tasks.Add(CreateStreamingSubscriptionGroupingAsync(impersonationId));
+                else
+                {
+                    // Upon completion kick of streamingsubscription
+                    tasks.Add(CreateStreamingSubscriptionGroupingAsync(impersonationId));
+                }
 
                 System.Threading.Tasks.Task.WaitAll(tasks.ToArray());
             }
@@ -338,9 +342,9 @@ namespace EWSResourceSync
                 {
                     EntitySubscription dbSubscription = null;
                     string watermark = null;
-                    if (_context.SubscriptionEntities.Any(rs => rs.SmtpAddress == room.SmtpAddress && rs.SubscriptionType == SubscriptionTypeEnum.PullSubscription))
+                    if (_context.SubscriptionEntities.Any(rs => rs.SmtpAddress == room.SmtpAddress))
                     {
-                        dbSubscription = _context.SubscriptionEntities.FirstOrDefault(rs => rs.SmtpAddress == room.SmtpAddress && rs.SubscriptionType == SubscriptionTypeEnum.PullSubscription);
+                        dbSubscription = _context.SubscriptionEntities.FirstOrDefault(rs => rs.SmtpAddress == room.SmtpAddress);
                         watermark = dbSubscription.Watermark;
                     }
                     else
@@ -349,7 +353,6 @@ namespace EWSResourceSync
                         dbSubscription = new EntitySubscription()
                         {
                             LastRunTime = DateTime.UtcNow,
-                            SubscriptionType = SubscriptionTypeEnum.PullSubscription,
                             SmtpAddress = room.SmtpAddress
                         };
                         _context.SubscriptionEntities.Add(dbSubscription);
@@ -362,7 +365,6 @@ namespace EWSResourceSync
 
                         // close out the old subscription
                         dbSubscription.PreviousWatermark = (!string.IsNullOrEmpty(watermark)) ? watermark : null;
-                        dbSubscription.SubscriptionId = subscription.Id;
                         dbSubscription.Watermark = subscription.Watermark;
 
 
@@ -370,13 +372,11 @@ namespace EWSResourceSync
                         _subscriptions.Add(new SubscriptionCollection()
                         {
                             Pulling = subscription,
-                            SmtpAddress = room.SmtpAddress,
-                            SubscriptionType = SubscriptionTypeEnum.PullSubscription
+                            SmtpAddress = room.SmtpAddress
                         });
 
                         var rowChanged = _context.SaveChanges();
                         _traceListener.Trace("SyncProgram", $"Pull subscription persisted {rowChanged} rows");
-
                     }
                     catch (Microsoft.Exchange.WebServices.Data.ServiceRequestException srex)
                     {
@@ -408,7 +408,7 @@ namespace EWSResourceSync
                                 var watermark = subscription.Watermark;
                                 ismore = subscription.MoreEventsAvailable;
                                 var email = item.SmtpAddress;
-                                var databaseItem = _context.SubscriptionEntities.FirstOrDefault(rs => rs.SmtpAddress == email && rs.SubscriptionType == SubscriptionTypeEnum.PullSubscription);
+                                var databaseItem = _context.SubscriptionEntities.FirstOrDefault(rs => rs.SmtpAddress == email);
 
                                 // pull last event from stack TODO: need heuristic for how meetings can be stored
                                 var filteredEvents = events.ItemEvents.OrderBy(x => x.TimeStamp);
@@ -555,40 +555,15 @@ namespace EWSResourceSync
 
 
                 _traceListener.Trace("SyncProgram", $"CreateStreamingSubscriptionGrouping to room {smtpAddress} with SubscriptionId {subscription.Id}");
-                var subscriptionLastMark = default(DateTime?);
-                var synchronizationState = string.Empty;
 
-                EntitySubscription dbSubscription = null;
-                if (context.SubscriptionEntities.Any(rs => rs.SmtpAddress == smtpAddress && rs.SubscriptionType == SubscriptionTypeEnum.StreamingSubscription))
-                {
-                    dbSubscription = context.SubscriptionEntities.FirstOrDefault(rs => rs.SmtpAddress == smtpAddress && rs.SubscriptionType == SubscriptionTypeEnum.StreamingSubscription);
-                    subscriptionLastMark = dbSubscription.LastRunTime;
-                    synchronizationState = dbSubscription.SynchronizationState;
-                }
-                else
-                {   // newup a subscription to track the watermark
-                    dbSubscription = new EntitySubscription()
-                    {
-                        LastRunTime = DateTime.UtcNow,
-                        SubscriptionType = SubscriptionTypeEnum.StreamingSubscription,
-                        SmtpAddress = smtpAddress
-                    };
-                    context.SubscriptionEntities.Add(dbSubscription);
-                }
-
-                dbSubscription.SubscriptionId = subscription.Id;
 
                 var subscriptions = context.SaveChanges();
                 _traceListener.Trace("SyncProgram", $"Streaming subscription persisted {subscriptions} persisted.");
 
-
                 _subscriptions.Add(new SubscriptionCollection()
                 {
                     SmtpAddress = smtpAddress,
-                    Streaming = subscription,
-                    SubscriptionType = SubscriptionTypeEnum.StreamingSubscription,
-                    SynchronizationDateTime = subscriptionLastMark,
-                    SynchronizationState = synchronizationState
+                    Streaming = subscription
                 });
 
             }
@@ -723,9 +698,17 @@ namespace EWSResourceSync
             {
                 _traceListener.Trace("SyncProgram", $"StreamingSubscriptionChangesAsync OnDisconnect with exception: {args.Exception}");
                 _traceListener.Trace("SyncProgram", $"OnDisconnection received for {args.Subscription.Service.ImpersonatedUserId.Id}");
+            }
+            catch(Exception ex)
+            {
+                _traceListener.Trace("SyncProgram", $"OnDisconnection received exception {ex.Message}");
+            }
 
+            try
+            {
                 if (CancellationTokenSource.IsCancellationRequested)
                 {
+                    _reconnect = false;
                     _traceListener.Trace("SyncProgram", $"OnDisconnect Closing streamingsubscriptionconnection at {DateTime.UtcNow}..");
                     CloseConnections();
                 }
@@ -737,13 +720,14 @@ namespace EWSResourceSync
                         return;
 
                     ReconnectToSubscriptions();
+                    _reconnect = true;  // We can't reconnect in the disconnect event, so we set a flag for the timer to pick this up and check all the connections
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                _traceListener.Trace("SyncProgram", "OnDisconnection received");
+                _traceListener.Trace("SyncProgram", $"Reconnect received exception {ex.Message}");
             }
-            _reconnect = true;  // We can't reconnect in the disconnect event, so we set a flag for the timer to pick this up and check all the connections
+
         }
 
         /// <summary>
@@ -876,7 +860,7 @@ namespace EWSResourceSync
 
             using (EWSDbContext context = new EWSDbContext(EWSConstants.Config.Database))
             {
-                var databaseItems = context.SubscriptionEntities.Where(di => di.SubscriptionType == SubscriptionTypeEnum.StreamingSubscription);
+                var databaseItems = context.RoomListRoomEntities.ToList();
 
                 try
                 {
@@ -889,11 +873,10 @@ namespace EWSResourceSync
                             subscription.Unsubscribe();
                             _traceListener.Trace("SyncProgram", $"Unsubscribed from {subscriptionItem.SmtpAddress}");
 
-                            if (databaseItems.Any(di => di.SmtpAddress == subscriptionItem.SmtpAddress && di.SubscriptionType == SubscriptionTypeEnum.StreamingSubscription))
+                            if (databaseItems.Any(di => di.SmtpAddress == subscriptionItem.SmtpAddress))
                             {
-                                var item = databaseItems.FirstOrDefault();
-                                item.Terminated = true;
-                                item.LastRunTime = DateTime.UtcNow;
+                                var item = databaseItems.FirstOrDefault(di => di.SmtpAddress == subscriptionItem.SmtpAddress);
+                                item.LastSyncDate = DateTime.UtcNow;
                             }
                         }
                         catch (Exception ex)

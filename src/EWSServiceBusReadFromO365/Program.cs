@@ -42,24 +42,12 @@ namespace EWSServiceBusReadFromO365
 
             try
             {
-                var service = System.Threading.Tasks.Task.Run(async () =>
-                {
-                    Trace.WriteLine("Acquiring Token....");
-                    return await EWSConstants.AcquireTokenAsync();
-
-                }, CancellationTokenSource.Token);
-                service.Wait();
-
-
                 var tasks = new List<System.Threading.Tasks.Task>();
 
                 Trace.WriteLine("In Thread RunAsync....");
                 IsDisposed = false;
 
-                var Ewstoken = service.Result;
-
-                Messenger = new MessageManager(CancellationTokenSource, Ewstoken);
-
+                Messenger = new MessageManager(CancellationTokenSource);
 
                 var queueSubscription = EWSConstants.Config.ServiceBus.O365Subscription;
                 var receiveO365Subscriptions = Messenger.ReceiveQueueO365ChangesAsync(queueSubscription);
@@ -81,8 +69,7 @@ namespace EWSServiceBusReadFromO365
                 p.Dispose();
             }
 
-            Trace.WriteLine("Done.   Press any key to terminate.");
-            Console.ReadLine();
+            Trace.WriteLine("Done.  Now terminating.");
         }
 
         static Program()

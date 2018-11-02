@@ -43,25 +43,15 @@ namespace EWSServiceBusSendToO365
 
             try
             {
-                var service = System.Threading.Tasks.Task.Run(async () =>
-                {
-                    Trace.WriteLine("Acquiring Token....");
-                    return await EWSConstants.AcquireTokenAsync();
-
-                }, CancellationTokenSource.Token);
-                service.Wait();
-
-
                 var tasks = new List<System.Threading.Tasks.Task>();
 
                 Trace.WriteLine("In Thread RunAsync....");
                 IsDisposed = false;
 
-                var Ewstoken = service.Result;
+                // Initialize the Manager with a Token for cancellation
+                Messenger = new MessageManager(CancellationTokenSource);
 
-                Messenger = new MessageManager(CancellationTokenSource, Ewstoken);
-
-
+                // Service Bus Connection
                 var queueConnection = EWSConstants.Config.ServiceBus.SendToO365;
 
                 // send and tick
@@ -84,8 +74,7 @@ namespace EWSServiceBusSendToO365
                 p.Dispose();
             }
 
-            Trace.WriteLine("Done.   Press any key to terminate.");
-            Console.ReadLine();
+            Trace.WriteLine("Done.  Now terminating.");
         }
 
 

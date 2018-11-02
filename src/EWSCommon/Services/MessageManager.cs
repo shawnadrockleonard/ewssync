@@ -47,10 +47,9 @@ namespace EWS.Common.Services
 
 
 
-        public MessageManager(CancellationTokenSource token, AuthenticationResult authenticationResult)
+        public MessageManager(CancellationTokenSource token)
         {
             _cancel = token;
-            Ewstoken = authenticationResult;
             MailboxOwner = EWSConstants.Config.Exchange.ImpersonationAcct;
             RandomSeed = new Random();
         }
@@ -58,6 +57,20 @@ namespace EWS.Common.Services
         public void IssueCancellation(CancellationTokenSource cancellationTokenSource)
         {
             _cancel = cancellationTokenSource;
+        }
+
+        /// <summary>
+        /// Retreive the EWS Authentication Token
+        /// </summary>
+        /// <returns></returns>
+        public async Task<AuthenticationResult> RetreiveToken()
+        {
+            if (Ewstoken == null || Ewstoken.ExpiresOn >= DateTimeOffset.Now)
+            {
+                Ewstoken = await EWSConstants.AcquireTokenAsync();
+            }
+
+            return Ewstoken;
         }
 
         /// <summary>
@@ -69,7 +82,8 @@ namespace EWS.Common.Services
         {
             var sender = new MessageSender(queueConnection, SBQueueSyncDb);
 
-            var EwsService = new EWService(Ewstoken);
+            var token = await RetreiveToken();
+            var EwsService = new EWService(token);
             EwsService.SetImpersonation(ConnectingIdType.SmtpAddress, MailboxOwner);
 
             // Poll the rooms to store locally
@@ -177,7 +191,9 @@ namespace EWS.Common.Services
         /// <returns></returns>
         public async System.Threading.Tasks.Task ReceiveQueueDatabaseChangesAsync(string queueConnection)
         {
-            var EwsService = new EWService(Ewstoken);
+
+            var token = await RetreiveToken();
+            var EwsService = new EWService(token);
 
 
             var propertyIds = new List<PropertyDefinitionBase>()
@@ -410,7 +426,8 @@ namespace EWS.Common.Services
         {
             Trace.WriteLine($"GetToO365() starting");
 
-            var EwsService = new EWService(Ewstoken);
+            var token = await RetreiveToken();
+            var EwsService = new EWService(token);
 
             var receiver = new MessageReceiver(queueConnection, SBQueueSubscriptionO365, ReceiveMode.ReceiveAndDelete);
 
@@ -614,7 +631,8 @@ namespace EWS.Common.Services
         {
             Trace.WriteLine($"ReceiveQueueO365SyncFoldersAsync() starting");
 
-            var EwsService = new EWService(Ewstoken);
+            var token = await RetreiveToken();
+            var EwsService = new EWService(token);
 
             var receiver = new MessageReceiver(queueConnection, SBQueueSyncO365, ReceiveMode.ReceiveAndDelete);
 
@@ -778,14 +796,15 @@ namespace EWS.Common.Services
 
         #region Helper Exchange Methods
 
-        public string RetreiveInfo(object e)
+        async public Task<string> RetreiveInfo(object e)
         {
             // Get more info for the given item.  This will run on it's own thread
             // so that the main program can continue as usual (we won't hold anything up)
 
             NotificationInfo n = (NotificationInfo)e;
 
-            var service = new EWService(Ewstoken, true);
+            var token = await RetreiveToken();
+            var service = new EWService(token, true);
             service.SetImpersonation(ConnectingIdType.SmtpAddress, n.Mailbox);
 
             service.Current.Url = n.Service.Url;

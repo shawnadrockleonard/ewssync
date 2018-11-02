@@ -6,8 +6,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{8D1DA3A7-AF99-43FD-A24B-3C64522B4DE1}</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>EWSResourcePush</RootNamespace>
-    <AssemblyName>EWSResourcePush</AssemblyName>
+    <RootNamespace>EWSServiceBusSendToO365</RootNamespace>
+    <AssemblyName>EWSServiceBusSendToO365</AssemblyName>
     <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
