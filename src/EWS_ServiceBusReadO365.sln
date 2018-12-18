@@ -1,0 +1,42 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28010.2046
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EWS.Common", "EWSCommon\EWS.Common.csproj", "{8B523081-9074-4E3B-8B71-8B3331DD1EAD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.Exchange.WebServices.Data", "ews-managed-api-master\Microsoft.Exchange.WebServices.Data.csproj", "{F059972F-0561-4203-ABB8-3ABB41CCBE22}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EWSServiceBusReadFromO365", "EWSServiceBusReadFromO365\EWSServiceBusReadFromO365.csproj", "{9DF6E7E3-53CB-440E-B8FC-9396B905A49C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "managed-api", "managed-api", "{D0178B59-1A51-4A12-8865-86849F0A4FD2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B523081-9074-4E3B-8B71-8B3331DD1EAD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F059972F-0561-4203-ABB8-3ABB41CCBE22}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F059972F-0561-4203-ABB8-3ABB41CCBE22}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F059972F-0561-4203-ABB8-3ABB41CCBE22}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F059972F-0561-4203-ABB8-3ABB41CCBE22}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9DF6E7E3-53CB-440E-B8FC-9396B905A49C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9DF6E7E3-53CB-440E-B8FC-9396B905A49C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9DF6E7E3-53CB-440E-B8FC-9396B905A49C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9DF6E7E3-53CB-440E-B8FC-9396B905A49C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{F059972F-0561-4203-ABB8-3ABB41CCBE22} = {D0178B59-1A51-4A12-8865-86849F0A4FD2}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A10F76AC-148B-416E-B0F6-3713C8F7135C}
+	EndGlobalSection
+EndGlobal

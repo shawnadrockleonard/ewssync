@@ -68,7 +68,6 @@
     <Build Include="dbo\Tables\RoomListRooms.sql" />
     <Build Include="dbo\Tables\Subscriptions.sql" />
     <Build Include="dbo\Tables\__MigrationHistory.sql" />
-    <Build Include="dbo\Tables\RoomListRoomsSyncState.sql" />
   </ItemGroup>
   <ItemGroup>
     <PostDeploy Include="Script.PostDeployment1.sql" />

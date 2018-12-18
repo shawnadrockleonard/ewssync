@@ -15,9 +15,6 @@ namespace EWS.Common.Services
         public FolderId Folder { get; set; }
 
 
-        public string SynchronizationState { get; set; }
-
-        public DateTime? LastRunTime { get; internal set; }
-        public string SmtpAddress { get; internal set; }
+        public string SmtpAddress { get; set; }
     }
 }

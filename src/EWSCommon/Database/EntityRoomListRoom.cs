@@ -29,14 +29,16 @@ namespace EWS.Common.Database
 
         public int? KnownEvents { get; set; }
 
+        [Column("SyncState")]
+        public string SynchronizationState { get; set; }
+
+        [Column("SyncTimestamp")]
+        public DateTime? SynchronizationTimestamp { get; set; }
+
         /// <summary>
         /// The collection of appointments associated with the room.
         /// </summary>
         public virtual ICollection<EntityRoomAppointment> Appointments { get; set; }
 
-        /// <summary>
-        /// The collection of sync activites for the Room
-        /// </summary>
-        public virtual ICollection<EntityRoomListRoomSyncState> SyncStates { get; set; }
     }
 }

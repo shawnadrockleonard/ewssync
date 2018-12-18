@@ -13,44 +13,32 @@ namespace EWS.Common.Database
     {
         public EntitySubscription()
         {
-            Terminated = false;
         }
 
         [Key()]
         public int Id { get; set; }
 
-
+        /// <summary>
+        /// Email Address to which the subscription pertains
+        /// </summary>
         [MaxLength(255)]
         public string SmtpAddress { get; set; }
 
         /// <summary>
-        /// Type of subscription
+        /// Watermark for individual subscription
         /// </summary>
-        public SubscriptionTypeEnum SubscriptionType { get; set; }
-
-        /// <summary>
-        /// Subscription ID
-        /// </summary>
-        public string SubscriptionId { get; set; }
-
         [MaxLength(2048)]
         public string Watermark { get; set; }
 
-
+        /// <summary>
+        /// Watermark from previous run
+        /// </summary>
         [MaxLength(2048)]
         public string PreviousWatermark { get; set; }
 
-
+        /// <summary>
+        /// Last Subscription event polling
+        /// </summary>
         public DateTime LastRunTime { get; set; }
-
-        /// <summary>
-        /// Is the subscription closed by thread or cancelled
-        /// </summary>
-        public bool Terminated { get; set; }
-
-        /// <summary>
-        /// Provides a Folder sync state cookie
-        /// </summary>
-        public string SynchronizationState { get; set; }
     }
 }

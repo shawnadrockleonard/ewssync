@@ -14,13 +14,6 @@ namespace EWS.Common.Models
 
         public StreamingSubscription Streaming { get; set; }
 
-        public EntitySubscription DatabaseSubscription { get; set; }
-
         public string SmtpAddress { get; set; }
-
-        /// <summary>
-        /// Type of subscription
-        /// </summary>
-        public SubscriptionTypeEnum SubscriptionType { get; set; }
     }
 }

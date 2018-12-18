@@ -1,19 +1,9 @@
-﻿using EWS.Common.Database;
-using EWS.Common.Services;
-using Microsoft.Exchange.WebServices.Data;
-using Microsoft.IdentityModel.Clients.ActiveDirectory;
-using Microsoft.Azure.ServiceBus.Core;
-using Newtonsoft.Json;
+﻿using EWS.Common.Services;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Data.Entity;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Microsoft.Azure.ServiceBus;
-using System.Text;
 
 namespace EWSServiceBusSendToO365
 {
@@ -35,51 +25,51 @@ namespace EWSServiceBusSendToO365
             Trace.AutoFlush = true;
             Trace.WriteLine("Capturing Send to O365 ...");
 
-            _handler += new EventHandler(ConsoleCtrlCheck);
-            SetConsoleCtrlHandler(_handler, true);
 
             var p = new Program();
 
-            var service = System.Threading.Tasks.Task.Run(async () =>
+            _handler += new EventHandler(p.ConsoleCtrlCheck);
+            SetConsoleCtrlHandler(_handler, true);
+
+            try
             {
-                Trace.WriteLine("In Thread run await....");
-                await p.RunAsync();
+                var tasks = new List<System.Threading.Tasks.Task>();
 
-            }, CancellationTokenSource.Token);
-            service.Wait();
+                Trace.WriteLine("In Thread RunAsync....");
+                IsDisposed = false;
 
+                // Initialize the Manager with a Token for cancellation
+                Messenger = new MessageManager(CancellationTokenSource);
 
-            Trace.WriteLine("Done.   Press any key to terminate.");
-            Console.ReadLine();
+                // Service Bus Connection
+                var queueConnection = EWSConstants.Config.ServiceBus.SendToO365;
+
+                // send and tick
+                var sendTask = Messenger.SendQueueDatabaseChangesAsync(queueConnection);
+                tasks.Add(sendTask);
+
+                // receive queue messages
+                var receiveTask = Messenger.ReceiveQueueDatabaseChangesAsync(queueConnection);
+                tasks.Add(receiveTask);
+
+                // Wait for each thread
+                System.Threading.Tasks.Task.WaitAll(tasks.ToArray());
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"Failed in thread wait {ex.Message} with {ex.StackTrace}");
+            }
+            finally
+            {
+                p.Dispose();
+            }
+
+            Trace.WriteLine("Done.  Now terminating.");
         }
 
 
         static Program()
         {
-        }
-
-        async private System.Threading.Tasks.Task RunAsync()
-        {
-            IsDisposed = false;
-
-            var Ewstoken = await EWSConstants.AcquireTokenAsync();
-
-
-            Messenger = new MessageManager(CancellationTokenSource, Ewstoken);
-
-
-            var queueConnection = EWSConstants.Config.ServiceBus.SendToO365;
-
-            var sendTask = Messenger.SendQueueDatabaseChangesAsync(queueConnection);
-
-            var receiveTask = Messenger.ReceiveQueueDatabaseChangesAsync(queueConnection);
-
-
-            await System.Threading.Tasks.Task.WhenAll(
-                // send and tick
-                sendTask,
-                // receive queue messages
-                receiveTask);
         }
 
 
@@ -100,9 +90,24 @@ namespace EWSServiceBusSendToO365
             CTRL_SHUTDOWN_EVENT = 6
         }
 
-        private static bool ConsoleCtrlCheck(CtrlType sig)
+        private bool ConsoleCtrlCheck(CtrlType sig)
         {
             Trace.WriteLine("Exiting system due to external CTRL-C, or process kill, or shutdown");
+
+            // dispose all threads
+            Dispose();
+
+            //shutdown right away so there are no lingering threads
+            Environment.Exit(-1);
+
+            return true;
+        }
+
+        private void Dispose()
+        {
+            Trace.WriteLine("Disposing");
+            if (IsDisposed)
+                return;
 
             // should cancel all registered events
             CancellationTokenSource.Cancel();
@@ -110,20 +115,13 @@ namespace EWSServiceBusSendToO365
             // issue into messenger
             Messenger.IssueCancellation(CancellationTokenSource);
 
-            // dispose of the messenger
-            if (!IsDisposed)
-            {
-                // should close out database and issue cancellation to token
-                Messenger.Dispose();
-            }
+            // should close out database and issue cancellation to token
+            Messenger.Dispose();
 
+            IsDisposed = true;
             Trace.WriteLine("Cleanup complete");
-
-            //shutdown right away so there are no lingering threads
-            Environment.Exit(-1);
-
-            return true;
         }
+
         #endregion
     }
 }

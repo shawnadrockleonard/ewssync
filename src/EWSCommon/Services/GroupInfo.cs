@@ -1,4 +1,5 @@
 ﻿using Microsoft.Exchange.WebServices.Data;
+using Microsoft.IdentityModel.Clients.ActiveDirectory;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,15 +10,14 @@ namespace EWS.Common.Services
 {
     public class GroupInfo
     {
-        private string _name = "";
-        private string _primaryMailbox = "";
-        private List<String> _mailboxes;
-        //private List<StreamingSubscriptionConnection> _streamingConnection;
-        private ExchangeService _exchangeService = null;
         private ITraceListener _traceListener = null;
-        private string _ewsUrl = "";
 
-        public GroupInfo(string Name, string PrimaryMailbox, string EWSUrl, ITraceListener TraceListener = null)
+        private readonly string _ewsUrl = "";
+
+        private AuthenticationResult ewsToken { get; set; }
+
+
+        public GroupInfo(string Name, string PrimaryMailbox, string EWSUrl, AuthenticationResult authentication, ITraceListener TraceListener = null)
         {
             // initialise the group information
             _name = Name;
@@ -26,13 +26,22 @@ namespace EWS.Common.Services
             _traceListener = TraceListener;
             _mailboxes = new List<String>();
             _mailboxes.Add(PrimaryMailbox);
+
+            ewsToken = authentication;
         }
 
+        private readonly string _name = "";
         public string Name
         {
             get { return _name; }
         }
 
+        /// <summary>
+        /// Represents a Dynamic Group name [not from Exchange]
+        /// </summary>
+        public string GroupInfoName { get; set; }
+
+        private string _primaryMailbox = "";
         public string PrimaryMailbox
         {
             get { return _primaryMailbox; }
@@ -45,6 +54,7 @@ namespace EWS.Common.Services
             }
         }
 
+        private ExchangeService _exchangeService = null;
         public ExchangeService ExchangeService
         {
             get
@@ -53,47 +63,55 @@ namespace EWS.Common.Services
                     return _exchangeService;
 
                 // Create exchange service for this group
-                ExchangeService exchange = new ExchangeService(ExchangeVersion.Exchange2013);
-                exchange.ImpersonatedUserId = new ImpersonatedUserId(ConnectingIdType.SmtpAddress, _primaryMailbox);
-                exchange.HttpHeaders.Add("X-AnchorMailbox", _primaryMailbox);
-                exchange.HttpHeaders.Add("X-PreferServerAffinity", "true");
-                exchange.Url = new Uri(_ewsUrl);
+                _exchangeService = new ExchangeService(ExchangeVersion.Exchange2013)
+                {
+                    ImpersonatedUserId = new ImpersonatedUserId(ConnectingIdType.SmtpAddress, _primaryMailbox)
+                };
+                _exchangeService.HttpHeaders.Add("X-AnchorMailbox", _primaryMailbox);
+                _exchangeService.HttpHeaders.Add("X-PreferServerAffinity", "true");
+                _exchangeService.Url = new Uri(_ewsUrl);
+                _exchangeService.Credentials = new OAuthCredentials(ewsToken.AccessToken);
                 if (_traceListener != null)
                 {
-                    exchange.TraceListener = _traceListener;
-                    exchange.TraceFlags = TraceFlags.All;
-                    exchange.TraceEnabled = true;
+                    _exchangeService.TraceListener = _traceListener;
+                    _exchangeService.TraceFlags = TraceFlags.All;
+                    _exchangeService.TraceEnabled = true;
                 }
-                return exchange;
+
+                return _exchangeService;
             }
         }
 
-        public List<String> Mailboxes
+
+        private List<string> _mailboxes;
+        public List<string> Mailboxes
         {
             get { return _mailboxes; }
         }
 
         /// <summary>
-        /// The maximum number of mailboxes in a group shouldn't exceed 200, which means that this group may consist of several groups. 
+        /// Indicator that Grouping has reached EWS capacity
         /// </summary>
-        public int NumberOfGroups
-        {
-            get { return ((_mailboxes.Count / 200)) + 1; }
-        }
-
-        public List<List<String>> MailboxesGrouped
+        public bool HasReachedThreshold
         {
             get
             {
-                // Return a list of lists (the group split into lists of 200)
-                List<List<String>> groupedMailboxes = new List<List<String>>();
-                for (int i = 0; i < NumberOfGroups; i++)
+                if(_mailboxes == null || !_mailboxes.Any())
                 {
-                    List<String> mailboxes = _mailboxes.GetRange(i * 200, 200);
-                    groupedMailboxes.Add(mailboxes);
+                    return false;
                 }
-                return groupedMailboxes;
+
+                return _mailboxes.Count() > 199;
             }
         }
+
+
+        private bool _isConnectionOpen = false;
+        public bool IsConnectionOpen
+        {
+            get { return _isConnectionOpen; }
+            set { _isConnectionOpen = value; }
+        }
+
     }
 }
