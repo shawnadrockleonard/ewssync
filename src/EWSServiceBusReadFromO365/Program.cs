@@ -13,6 +13,7 @@ using System.Linq;
 using System.Data.Entity;
 using System.Runtime.Serialization;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -25,6 +26,7 @@ namespace EWSServiceBusReadFromO365
     class Program
     {
         static private System.Threading.CancellationTokenSource CancellationTokenSource = new System.Threading.CancellationTokenSource();
+        private static readonly AutoResetEvent AutoResetEvent = new AutoResetEvent(false);
         static private bool IsDisposed { get; set; }
         static MessageManager Messenger { get; set; }
 
@@ -34,27 +36,39 @@ namespace EWSServiceBusReadFromO365
             Trace.AutoFlush = true;
             Trace.WriteLine("Capturing Reading from O365 ...");
 
-            _handler += new EventHandler(ConsoleCtrlCheck);
-            SetConsoleCtrlHandler(_handler, true);
-
             var p = new Program();
 
-            var service = System.Threading.Tasks.Task.Run(async () =>
+            var _handler = new EventHandler(p.ConsoleCtrlCheck);
+            SetConsoleCtrlHandler(_handler, true);
+
+
+            Task.Factory.StartNew(() =>
             {
                 Trace.WriteLine("In Thread run await....");
                 await p.RunAsync();
+                p.DisposeWithToken();
 
             }, CancellationTokenSource.Token);
-            service.Wait();
 
 
-            Trace.WriteLine("Done.   Press any key to terminate.");
-            Console.ReadLine();
+            Console.CancelKeyPress += (object sender, ConsoleCancelEventArgs e) =>
+            {
+                p.OnCancelKeyPress(sender, e);
+            };
+
+            AutoResetEvent.WaitOne();
+            MessageWrite("After WaitOne fired event");
         }
 
         static Program()
         {
 
+        }
+
+        private static void MessageWrite(string message)
+        {
+            System.Diagnostics.Trace.TraceInformation($"{message} at {DateTime.UtcNow}");
+            Console.WriteLine(message);
         }
 
         async private System.Threading.Tasks.Task RunAsync()
@@ -86,11 +100,19 @@ namespace EWSServiceBusReadFromO365
 
         #region Trap application termination
 
+        private void OnCancelKeyPress(object sender, ConsoleCancelEventArgs e)
+        {
+            MessageWrite("CTRL-C event fired.");
+            // Dispose it
+            DisposeWithToken();
+            e.Cancel = true;
+            AutoResetEvent.Set();
+        }
+
         [DllImport("Kernel32")]
         private static extern bool SetConsoleCtrlHandler(EventHandler handler, bool add);
 
         private delegate bool EventHandler(CtrlType sig);
-        static EventHandler _handler;
 
         enum CtrlType
         {
@@ -101,30 +123,40 @@ namespace EWSServiceBusReadFromO365
             CTRL_SHUTDOWN_EVENT = 6
         }
 
-        private static bool ConsoleCtrlCheck(CtrlType sig)
+        private bool ConsoleCtrlCheck(CtrlType sig)
         {
-            Trace.WriteLine("Exiting system due to external CTRL-C, or process kill, or shutdown");
+            MessageWrite("CTRL-C, or process kill, or shutdown");
 
-            // should cancel all registered events
-            CancellationTokenSource.Cancel();
-
-            // issue into messenger
-            Messenger.IssueCancellation(CancellationTokenSource);
-
-            // dispose of the messenger
-            if (!IsDisposed)
-            {
-                // should close out database and issue cancellation to token
-                Messenger.Dispose();
-            }
-
-            Trace.WriteLine("Cleanup complete");
+            // Dispose it
+            DisposeWithToken();
 
             //shutdown right away so there are no lingering threads
             Environment.Exit(-1);
 
             return true;
         }
+
+
+        private void DisposeWithToken()
+        {
+            Trace.WriteLine("Exiting system due to external CTRL-C, or process kill, or shutdown");
+            if (IsDisposed)
+                return;
+
+            // should cancel all registered events
+            if (CancellationTokenSource.IsCancellationRequested)
+                CancellationTokenSource.Cancel();
+
+            // issue into messenger
+            Messenger.IssueCancellation(CancellationTokenSource);
+
+            // should close out database and issue cancellation to token
+            Messenger.Dispose();
+
+            IsDisposed = true;
+            MessageWrite("Cleanup complete");
+        }
+
         #endregion
     }
 }
