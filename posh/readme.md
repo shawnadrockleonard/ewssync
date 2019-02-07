@@ -1,6 +1,6 @@
 # Azure AD registration and Service Bus configuration instructions
 
-![alt text](./imgs/app-reg-01-list.png, "Registration Listing")
+![alt text](https://raw.githubusercontent.com/shawnadrockleonard/ewssync/master/posh/imgs/app-reg-01-list.png, "Registration Listing")
 
 
 ### Documentation
