@@ -21,7 +21,6 @@ namespace EWSServiceBusReadFromO365
             Trace.AutoFlush = true;
             Trace.WriteLine("Capturing Reading from O365 ...");
 
-
             var p = new Program();
 
             _handler += new EventHandler(p.ConsoleCtrlCheck);
