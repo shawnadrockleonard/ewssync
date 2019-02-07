@@ -1,6 +1,20 @@
-﻿using EWS.Common.Services;
+﻿using EWS.Common;
+using EWS.Common.Database;
+using EWS.Common.Services;
+using Microsoft.Exchange.WebServices.Data;
+using Microsoft.IdentityModel.Clients.ActiveDirectory;
+using Microsoft.ServiceBus.Messaging;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Configuration;
+using System.IO;
+using System.Linq;
+using System.Data.Entity;
+using System.Runtime.Serialization;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -12,6 +26,7 @@ namespace EWSServiceBusReadFromO365
     class Program
     {
         static private System.Threading.CancellationTokenSource CancellationTokenSource = new System.Threading.CancellationTokenSource();
+        private static readonly AutoResetEvent AutoResetEvent = new AutoResetEvent(false);
         static private bool IsDisposed { get; set; }
         static MessageManager Messenger { get; set; }
 
@@ -23,39 +38,26 @@ namespace EWSServiceBusReadFromO365
 
             var p = new Program();
 
-            _handler += new EventHandler(p.ConsoleCtrlCheck);
+            var _handler = new EventHandler(p.ConsoleCtrlCheck);
             SetConsoleCtrlHandler(_handler, true);
 
-            try
+
+            Task.Factory.StartNew(() =>
             {
-                var tasks = new List<System.Threading.Tasks.Task>();
+                Trace.WriteLine("In Thread run await....");
+                await p.RunAsync();
+                p.DisposeWithToken();
 
-                Trace.WriteLine("In Thread RunAsync....");
-                IsDisposed = false;
+            }, CancellationTokenSource.Token);
 
-                Messenger = new MessageManager(CancellationTokenSource);
 
-                var queueSubscription = EWSConstants.Config.ServiceBus.O365Subscription;
-                var receiveO365Subscriptions = Messenger.ReceiveQueueO365ChangesAsync(queueSubscription);
-                tasks.Add(receiveO365Subscriptions);
-
-                var queueSync = EWSConstants.Config.ServiceBus.O365Sync;
-                var receiveO365Sync = Messenger.ReceiveQueueO365SyncFoldersAsync(queueSync);
-                tasks.Add(receiveO365Sync);
-
-                // Wait for each thread
-                System.Threading.Tasks.Task.WaitAll(tasks.ToArray());
-            }
-            catch (Exception ex)
+            Console.CancelKeyPress += (object sender, ConsoleCancelEventArgs e) =>
             {
-                Trace.WriteLine($"Failed in thread wait {ex.Message} with {ex.StackTrace}");
-            }
-            finally
-            {
-                p.Dispose();
-            }
+                p.OnCancelKeyPress(sender, e);
+            };
 
-            Trace.WriteLine("Done.  Now terminating.");
+            AutoResetEvent.WaitOne();
+            MessageWrite("After WaitOne fired event");
         }
 
         static Program()
@@ -63,14 +65,54 @@ namespace EWSServiceBusReadFromO365
 
         }
 
+        private static void MessageWrite(string message)
+        {
+            System.Diagnostics.Trace.TraceInformation($"{message} at {DateTime.UtcNow}");
+            Console.WriteLine(message);
+        }
+
+        async private System.Threading.Tasks.Task RunAsync()
+        {
+            IsDisposed = false;
+
+            var Ewstoken = await EWSConstants.AcquireTokenAsync();
+
+
+            Messenger = new MessageManager(CancellationTokenSource, Ewstoken);
+
+
+
+            var queueSubscription = EWSConstants.Config.ServiceBus.O365Subscription;
+            var receiveO365Subscriptions = Messenger.ReceiveQueueO365ChangesAsync(queueSubscription);
+
+            var queueSync = EWSConstants.Config.ServiceBus.O365Sync;
+            var receiveO365Sync = Messenger.ReceiveQueueO365SyncFoldersAsync(queueSync);
+
+
+            await System.Threading.Tasks.Task.WhenAll(
+                // receive syncfolder events
+                receiveO365Sync,
+                // receive queue messages
+                receiveO365Subscriptions
+            );
+        }
+
 
         #region Trap application termination
+
+        private void OnCancelKeyPress(object sender, ConsoleCancelEventArgs e)
+        {
+            MessageWrite("CTRL-C event fired.");
+            // Dispose it
+            DisposeWithToken();
+            e.Cancel = true;
+            AutoResetEvent.Set();
+        }
 
         [DllImport("Kernel32")]
         private static extern bool SetConsoleCtrlHandler(EventHandler handler, bool add);
 
         private delegate bool EventHandler(CtrlType sig);
-        static EventHandler _handler;
 
         enum CtrlType
         {
@@ -83,10 +125,10 @@ namespace EWSServiceBusReadFromO365
 
         private bool ConsoleCtrlCheck(CtrlType sig)
         {
-            Trace.WriteLine("Exiting system due to external CTRL-C, or process kill, or shutdown");
+            MessageWrite("CTRL-C, or process kill, or shutdown");
 
             // Dispose it
-            Dispose();
+            DisposeWithToken();
 
             //shutdown right away so there are no lingering threads
             Environment.Exit(-1);
@@ -94,14 +136,16 @@ namespace EWSServiceBusReadFromO365
             return true;
         }
 
-        private void Dispose()
+
+        private void DisposeWithToken()
         {
-            Trace.WriteLine("Disposing");
+            Trace.WriteLine("Exiting system due to external CTRL-C, or process kill, or shutdown");
             if (IsDisposed)
                 return;
 
             // should cancel all registered events
-            CancellationTokenSource.Cancel();
+            if (CancellationTokenSource.IsCancellationRequested)
+                CancellationTokenSource.Cancel();
 
             // issue into messenger
             Messenger.IssueCancellation(CancellationTokenSource);
@@ -110,7 +154,7 @@ namespace EWSServiceBusReadFromO365
             Messenger.Dispose();
 
             IsDisposed = true;
-            Trace.WriteLine("Cleanup complete");
+            MessageWrite("Cleanup complete");
         }
 
         #endregion
