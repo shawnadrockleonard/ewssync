@@ -41,7 +41,7 @@ namespace Microsoft.Exchange.WebServices.Data
         #region Private members
 
         private XmlNodeType prevNodeType = XmlNodeType.None;
-        private XmlReader xmlReader;
+        private readonly XmlReader xmlReader;
 
         #endregion
 
@@ -70,7 +70,7 @@ namespace Microsoft.Exchange.WebServices.Data
             XmlReaderSettings settings = new XmlReaderSettings()
             {
                 ConformanceLevel = ConformanceLevel.Auto,
-                ProhibitDtd = true,
+                DtdProcessing = DtdProcessing.Prohibit,
                 IgnoreComments = true,
                 IgnoreProcessingInstructions = true,
                 IgnoreWhitespace = true,

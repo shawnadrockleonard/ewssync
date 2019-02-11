@@ -173,6 +173,7 @@ namespace Microsoft.Exchange.WebServices.Data
             }
             catch (ServiceRequestException ex)
             {
+                System.Diagnostics.Trace.TraceError($"Error {ex}");
                 throw;
             }
         }
